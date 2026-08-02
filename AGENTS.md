@@ -63,8 +63,18 @@ npm install          # @modelcontextprotocol/sdk + playwright
 npm start            # run the server on stdio (for an MCP client)
 ```
 
-There is **no test suite yet** — the highest-value contribution to this repo
-is one. Smoke-test a change without an MCP client by driving stdio directly:
+```bash
+npm test             # node --test: sibling-free units + the stdio smoke
+```
+
+`test/unit.test.mjs` covers the units that need no sibling checkout
+(stripJsonc, the CAPABILITIES.md parser via its rawText parameter, the
+deployApp validation error paths, the BENIGN console filter);
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 9 tools,
+a capabilities query) and **skips itself when the ai-demokit sibling is
+absent**, so `npm test` is green in a bare checkout and exercises the full
+path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
+on every push/PR. Manual stdio driving, when a test is not enough:
 
 ```bash
 node -e '
