@@ -25,7 +25,7 @@ The server orchestrates sibling checkouts (override locations with env vars):
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5        # A2UI5_HOME
 git clone https://github.com/abap2UI5/ai-demokit      # AI_DEMOKIT_HOME
-git clone https://github.com/abap2UI5/abap2UI5-linter # AI_VIEW_CHECK_HOME (optional, for validate_view)
+git clone https://github.com/abap2UI5/abap2UI5-linter # AI_VIEW_CHECK_HOME (required for validate_view)
 git clone https://github.com/abap2UI5/ai-mcp
 cd abap2UI5 && npm ci && cd ../ai-demokit && npm ci && cd ../abap2UI5-linter && npm ci && cd ../ai-mcp && npm ci
 npx playwright install chromium
@@ -51,7 +51,7 @@ claude mcp add abap2ui5 -- node /path/to/ai-mcp/server.mjs
 | `backend` | `status` / `start` / `stop` / `restart` of the local express backend |
 | `remove_app` | Delete a dev app from the sandbox (or list the deployed ones) |
 
-`run_app` works for new dev apps and equally for the 276 existing ai-demokit
+`run_app` works for new dev apps and equally for the existing ai-demokit
 ports and `z2ui5_cl_ai_app_overview` — useful as a reference: "run the closest
 existing port, look at it, then build mine".
 

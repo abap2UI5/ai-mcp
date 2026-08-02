@@ -5,7 +5,7 @@
  *
  * Speaks MCP over stdio. Register it in any MCP client, e.g. Claude Code:
  *
- *   claude mcp add abap2ui5 -- node mcp/server.mjs
+ *   claude mcp add abap2ui5 -- node ai-mcp/server.mjs
  *
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
@@ -15,6 +15,7 @@
  *   deploy_app        write an app class into src/zz_dev/ (+ optional lint)
  *   build_backend     transpile framework + apps to the Node backend (e2e-build)
  *   run_app           boot the app headless, return page errors + a SCREENSHOT
+ *   remove_app        delete a dev app from src/zz_dev/ again
  *   backend           start/stop/status of the express backend
  *
  * The intended agent loop: capabilities -> deploy_app -> build_backend ->
@@ -345,7 +346,7 @@ async function handle(name, args = {}) {
 }
 
 const server = new Server(
-  { name: 'abap2ui5', version: '1.0.0' },
+  { name: 'abap2ui5', version: '0.1.0' },
   { capabilities: { tools: {} } },
 );
 

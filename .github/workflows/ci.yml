@@ -1,0 +1,29 @@
+# Unit tests for the sibling-free units (stripJsonc, the CAPABILITIES.md
+# parser, deployApp validation, the BENIGN console filter). The stdio smoke
+# in test/smoke.test.mjs skips itself here - it needs the ai-demokit sibling
+# checkout, which a bare CI checkout does not have.
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm test
