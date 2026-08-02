@@ -109,8 +109,7 @@ const TOOLS = [
     name: 'validate_view',
     description:
       'Fast static validation via abap2UI5-linter, BEFORE the build/run loop: reconstructs the view from the ' +
-      'builder calls - the typed z2ui5_cl_xml_view or the generic z2ui5_cl_ai_xml - (or takes raw view XML), ' +
-      'runs the UI5 property gate (@since floor, ' +
+      'z2ui5_cl_ai_xml builder calls (or takes raw view XML), runs the UI5 property gate (@since floor, ' +
       'deprecation) and renders it headless with a typed mock model. Seconds instead of a build+boot — use it ' +
       'after writing ABAP, then deploy_app once it is clean. Each finding carries severity (error = the app ' +
       'breaks, warning = not necessarily on your target UI5, hint = advisory), a message and the line/column ' +
@@ -118,7 +117,7 @@ const TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        abap_source: { type: 'string', description: 'ABAP class source building its view with z2ui5_cl_xml_view or z2ui5_cl_ai_xml' },
+        abap_source: { type: 'string', description: 'ABAP class source building its view with z2ui5_cl_ai_xml' },
         xml: { type: 'string', description: 'alternatively: raw view/fragment XML' },
         min_ui5: { type: 'string', description: 'UI5 floor for the property gate (default 1.71)' },
         allow: { type: 'array', items: { type: 'string' }, description: 'accepted deviations, e.g. ["sap.m.GenericTile.systemInfo"]' },
