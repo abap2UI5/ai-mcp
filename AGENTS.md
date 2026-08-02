@@ -17,7 +17,7 @@ absolute fallback paths from the original dev sandbox):
 | --- | --- | --- |
 | `AI_DEMOKIT_HOME` | `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
 | `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/` |
-| `AI_VIEW_CHECK_HOME` | `../abap2UI5-linter` (legacy alias: `../ai-view-check`) | `validate_view`: dynamic import of `lib/index.mjs` + `lib/render.mjs`, snapshot `data/properties.json` |
+| `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view`: dynamic import of `lib/index.mjs` + `lib/render.mjs`, snapshot `data/properties.json` |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
 `A2UI5_MCP_CHROMIUM` (browser path).
@@ -106,9 +106,11 @@ accordingly — a "hung" build is usually just a slow transpile.
   `version`** are duplicated by hand — update both when adding a tool or
   bumping `package.json` (they have drifted before: a missing `remove_app`
   row, `1.0.0` vs `0.1.0`).
-- `lib/repos.mjs` still resolves the **pre-rename alias `ai-view-check`**
-  (and the VS Code extension mirrors it in `src/mcp.ts`/`src/viewcheck.ts`).
-  Drop it only in a coordinated change across both repos.
+- `lib/repos.mjs` exports **`VIEW_CHECK_DIRS`**: the checker's own directory
+  name `linter` plus the **pre-rename aliases** `abap2UI5-linter` and
+  `ai-view-check`, in that order. The VS Code extension mirrors the same list
+  by hand in `src/mcp.ts` and `src/viewcheck.ts` — change all three together,
+  and drop an alias only in a coordinated change across both repos.
 - The committed **absolute fallback paths** (`/home/user/...`) exist for the
   original dev sandbox; in any other environment set the env vars instead of
   editing them.
@@ -121,5 +123,5 @@ accordingly — a "hung" build is usually just a slow transpile.
 | --- | --- |
 | [ai-demokit](https://github.com/abap2UI5/ai-demokit) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime |
 | [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server |
-| [abap2UI5-linter](https://github.com/abap2UI5/abap2UI5-linter) | `validate_view` implementation (path-imported) |
-| [vscode-extension](https://github.com/abap2UI5-addons/vscode-extension) | Registers this server for MCP clients in the editor (`src/mcp.ts`) |
+| [abap2UI5-linter](https://github.com/abap2UI5/linter) | `validate_view` implementation (path-imported) |
+| [vscode-extension](https://github.com/abap2UI5/vscode-extension) | Registers this server for MCP clients in the editor (`src/mcp.ts`) |
