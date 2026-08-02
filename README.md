@@ -51,7 +51,7 @@ claude mcp add abap2ui5 -- node /path/to/ai-mcp/server.mjs
 | `backend` | `status` / `start` / `stop` / `restart` of the local express backend |
 | `remove_app` | Delete a dev app from the sandbox (or list the deployed ones) |
 
-`run_app` works for new dev apps and equally for the 276 existing ai-demokit
+`run_app` works for new dev apps and equally for the existing ai-demokit
 ports and `z2ui5_cl_ai_app_overview` — useful as a reference: "run the closest
 existing port, look at it, then build mine".
 
