@@ -15,18 +15,20 @@ absolute fallback paths from the original dev sandbox):
 
 | Env var | Default sibling | Used for |
 | --- | --- | --- |
-| `AI_DEMOKIT_HOME` | `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
-| `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/` |
+| `AI_DEMOKIT_HOME` | `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt` (porting_rules), `meta/*.json` sidecars + port sources under `src/` (example_app), `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
+| `A2UI5_HOME` | `../abap2UI5` | `docs/agents/building-apps.md` (generation_rules), `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/` |
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view`: dynamic import of `lib/index.mjs` + `lib/render.mjs`, snapshot `data/properties.json` |
+| `OPENUI5_SRC` | `../fork-openui5` (next to ai-demokit) | `scope_of` only: control `@since`/`@deprecated` JSDoc, read by ai-demokit's `scripts/scope-of.mjs`; the server pre-checks the checkout and errors actionably when it is missing |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
 `A2UI5_MCP_CHROMIUM` (browser path).
 
 A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool errors) — `validate_view`
-needs the linter, `build_backend`/`run_app`/`backend` need the core repo,
+needs the linter, `generation_rules`/`build_backend`/`run_app`/`backend`
+need the core repo, `scope_of` additionally needs the OpenUI5 checkout,
 almost everything else needs ai-demokit. The README calls the linter
-"optional"; that is true for 7 of 9 tools and fatal for `validate_view`.
+"optional"; that is true for 10 of 11 tools and fatal for `validate_view`.
 
 ### The compatibility surface — renames upstream break tools here silently
 
@@ -34,10 +36,16 @@ These upstream file names/shapes are load-bearing for ai-mcp. When one
 changes upstream, this repo must change in the same breath:
 
 - ai-demokit: `CAPABILITIES.md` **table format** (4 columns, status emoji —
-  parser + legend in `lib/capabilities.mjs`), `scripts/generation-prompt.txt`,
-  `scripts/scope-of.mjs` CLI output, `scripts/e2e-build.mjs`, `abaplint.jsonc`,
-  the `src/zz_dev/` package convention.
-- abap2UI5 core: `node/srv/express.mjs`, `node/setup/abap_transpile.json`,
+  parser + legend in `lib/capabilities.mjs`; `lib/example-app.mjs` also mines
+  its rows for "app NNN" evidence refs), `scripts/generation-prompt.txt`,
+  the `meta/<class>.json` sidecar shape (`class`/`sample`/`entity`/`file`/
+  `status`/`checked`/`deviations` — read by `lib/example-app.mjs`),
+  `scripts/scope-of.mjs` CLI output (incl. its `OPENUI5_SRC` /
+  `../fork-openui5` resolution, mirrored in `server.mjs`),
+  `scripts/e2e-build.mjs`, `abaplint.jsonc`, the `src/zz_dev/` package
+  convention.
+- abap2UI5 core: `docs/agents/building-apps.md` (served verbatim by
+  `generation_rules`), `node/srv/express.mjs`, `node/setup/abap_transpile.json`,
   `node/downport/`, `node/output/init.mjs`.
 - abap2UI5-linter: `lib/index.mjs`, `lib/render.mjs`, `data/properties.json`
   — imported **by path**, not via the package `exports` map, so even a pure
@@ -69,11 +77,13 @@ npm test             # node --test: sibling-free units + the stdio smoke
 
 `test/unit.test.mjs` covers the units that need no sibling checkout
 (stripJsonc, the CAPABILITIES.md parser via its rawText parameter, the
-deployApp validation error paths, the BENIGN console filter);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 9 tools,
-a capabilities query) and **skips itself when the ai-demokit sibling is
-absent**, so `npm test` is green in a bare checkout and exercises the full
-path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
+`example_app` ranking via fixture metas, the deployApp validation error
+paths, the BENIGN console filter, and the server.mjs contract gates:
+header-comment tool list == TOOLS array, server version == package.json);
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 11 tools,
+a capabilities query, an example_app lookup) and **skips itself when the
+ai-demokit sibling is absent**, so `npm test` is green in a bare checkout
+and exercises the full path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
 on every push/PR. Manual stdio driving, when a test is not enough:
 
 ```bash
@@ -88,10 +98,11 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 9 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 11 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
-table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`
+table parser (`lib/capabilities.mjs`), the port ranking
+(`rankExamplePorts` in `lib/example-app.mjs`), the class-name/`z2ui5_if_app`
 validation in `deployApp`, the `BENIGN` console-noise filter.
 
 ## Timing expectations
@@ -105,7 +116,8 @@ accordingly — a "hung" build is usually just a slow transpile.
 - The **tool list in the `server.mjs` header comment** and the **server
   `version`** are duplicated by hand — update both when adding a tool or
   bumping `package.json` (they have drifted before: a missing `remove_app`
-  row, `1.0.0` vs `0.1.0`).
+  row, `1.0.0` vs `0.1.0`). Both drifts are now gated by contract tests in
+  `test/unit.test.mjs` — `npm test` fails until you update them.
 - `lib/repos.mjs` exports **`VIEW_CHECK_DIRS`**: the checker's own directory
   name `linter` plus the **pre-rename aliases** `abap2UI5-linter` and
   `ai-view-check`, in that order. The VS Code extension mirrors the same list

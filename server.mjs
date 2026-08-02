@@ -9,7 +9,9 @@
  *
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
- *   generation_rules  the porting/building rulebook (generation-prompt.txt)
+ *   generation_rules  how to BUILD an app (abap2UI5 docs/agents/building-apps.md)
+ *   porting_rules     the ai-demokit porting brief (generation-prompt.txt)
+ *   example_app       read an existing ai-demokit port (ABAP source + sidecar)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
  *   validate_view     static gates via abap2UI5-linter (properties + render)
  *   deploy_app        write an app class into src/zz_dev/ (+ optional lint)
@@ -28,7 +30,8 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
-import { resolveAiDemokit, resolveViewCheck, SERVER_ROOT } from './lib/repos.mjs';
+import { readExampleApp, searchExampleApps } from './lib/example-app.mjs';
+import { resolveA2UI5, resolveAiDemokit, resolveViewCheck, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
   removeApp,
@@ -65,10 +68,35 @@ const TOOLS = [
   {
     name: 'generation_rules',
     description:
-      'The canonical rulebook for writing an abap2UI5 app with the generic view builder ' +
-      '(dispatcher skeleton, view/attribute idioms, binding and event rules). Read it once before ' +
-      'generating ABAP.',
+      'The canonical guide for BUILDING an abap2UI5 app (app class template, lifecycle, view building ' +
+      'with z2ui5_cl_ai_xml, two-way binding, events, popups) — the abap2UI5 repo\'s agent guide, read ' +
+      'live. Read it once before generating ABAP. For porting official UI5 demo kit samples inside ' +
+      'ai-demokit use porting_rules instead.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'porting_rules',
+    description:
+      'The porting brief for rebuilding an official UI5 demo kit sample 1:1 as an ai-demokit port class ' +
+      '(ai-demokit scripts/generation-prompt.txt). Only for porting work inside the ai-demokit corpus — ' +
+      'for building a NEW app use generation_rules.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'example_app',
+    description:
+      'Read an existing ai-demokit port as a working example: returns the full ABAP source plus the ' +
+      'meta/<class>.json sidecar summary (ported sample, entity, verification status, deviations). ' +
+      'capabilities answers cite evidence like "app 044" — this tool is how you read that code: ' +
+      '{ class_name: "z2ui5_cl_ai_app_044" } or { query: "app 044" } or { query: "pdf popup" } ' +
+      '(free-text search over the sidecars and CAPABILITIES.md, best match + other candidates).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'keywords or an app number, e.g. "tree table" or "app 044"' },
+        class_name: { type: 'string', description: 'exact port class, e.g. z2ui5_cl_ai_app_044' },
+      },
+    },
   },
   {
     name: 'scope_of',
@@ -198,6 +226,16 @@ async function runScopeOf(entities) {
   });
 }
 
+// scope-of.mjs reads the control JSDoc from an OpenUI5 checkout: OPENUI5_SRC,
+// else ../fork-openui5 next to ai-demokit. Without it every entity comes back
+// UNRESOLVED — check up front and say what to do instead of relaying that.
+function openUi5Src(demokit) {
+  const dir = process.env.OPENUI5_SRC
+    ? path.resolve(process.env.OPENUI5_SRC)
+    : path.resolve(demokit, '..', 'fork-openui5');
+  return fs.existsSync(path.join(dir, 'src')) ? dir : { missing: dir };
+}
+
 async function handle(name, args = {}) {
   switch (name) {
     case 'capabilities': {
@@ -212,17 +250,50 @@ async function handle(name, args = {}) {
       return text({ matches: hits.length, entries: hits });
     }
     case 'generation_rules': {
-      const p = path.join(resolveAiDemokit(), 'scripts', 'generation-prompt.txt');
+      const a2 = resolveA2UI5();
+      if (!a2) {
+        return toolError('abap2UI5 checkout not found — set A2UI5_HOME or clone https://github.com/abap2UI5/abap2UI5 as a sibling (the building-apps guide lives there)');
+      }
+      const p = path.join(a2, 'docs', 'agents', 'building-apps.md');
+      if (!fs.existsSync(p)) {
+        return toolError(`building-apps guide not found at ${p} — pull a current abap2UI5 checkout (docs/agents/building-apps.md)`);
+      }
       const rules = fs.readFileSync(p, 'utf8');
       return text(
         rules +
-          '\n\n---\nMore depth: AGENTS.md (conventions, gates), CAPABILITIES.md via the capabilities tool, ' +
-          'and https://abap2ui5.github.io/docs/advanced/agent.html for apps built on z2ui5_cl_xml_view.',
+          '\n\n---\nMore depth: CAPABILITIES.md via the capabilities tool, example_app for working port sources, ' +
+          'and https://abap2ui5.github.io/docs/llms.txt as further reading.',
       );
+    }
+    case 'porting_rules': {
+      const demokit = resolveAiDemokit();
+      if (!demokit) {
+        return toolError('ai-demokit checkout not found — set AI_DEMOKIT_HOME or clone it as a sibling (the porting brief lives there)');
+      }
+      const rules = fs.readFileSync(path.join(demokit, 'scripts', 'generation-prompt.txt'), 'utf8');
+      return text(
+        rules +
+          '\n\n---\nMore depth: the ai-demokit AGENTS.md (conventions, gates) and CAPABILITIES.md via the capabilities tool.',
+      );
+    }
+    case 'example_app': {
+      if (args.class_name) return text(readExampleApp(args.class_name));
+      if (args.query) return text(searchExampleApps(args.query));
+      return toolError('pass class_name (e.g. z2ui5_cl_ai_app_044) or query (e.g. "app 044", "tree table")');
     }
     case 'scope_of': {
       const entities = args.entities || [];
       if (!entities.length) return toolError('pass at least one entity, e.g. ["sap.m.Wizard"]');
+      const demokit = resolveAiDemokit();
+      if (!demokit) return toolError('ai-demokit checkout not found — set AI_DEMOKIT_HOME or clone it as a sibling (scope-of.mjs lives there)');
+      const ui5 = openUi5Src(demokit);
+      if (ui5.missing) {
+        return toolError(
+          `OpenUI5 checkout not found — scope_of reads the control JSDoc from the OpenUI5 sources. ` +
+            `Clone them to ${ui5.missing} (git clone --depth 1 https://github.com/SAP/openui5 "${ui5.missing}") ` +
+            `or set OPENUI5_SRC to an existing checkout.`,
+        );
+      }
       const { code, out } = await runScopeOf(entities);
       return text(`${out}\n\n(exit ${code}: 0 = all in scope, 1 = at least one out of scope or unresolved)`);
     }
@@ -346,7 +417,7 @@ async function handle(name, args = {}) {
 }
 
 const server = new Server(
-  { name: 'abap2ui5', version: '0.1.0' },
+  { name: 'abap2ui5', version: '0.1.1' },
   { capabilities: { tools: {} } },
 );
 

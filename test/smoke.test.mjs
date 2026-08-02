@@ -12,7 +12,7 @@ import { resolveAiDemokit } from '../lib/repos.mjs';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HAVE_DEMOKIT = !!resolveAiDemokit();
 
-test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEMOKIT && 'ai-demokit sibling not found' }, async () => {
+test('stdio smoke: initialize, 11 tools, a capabilities query', { skip: !HAVE_DEMOKIT && 'ai-demokit sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));
@@ -50,11 +50,15 @@ test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEM
 
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const list = await until((m) => m.id === 2);
-    assert.equal(list.result.tools.length, 9);
+    assert.equal(list.result.tools.length, 11);
 
     send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'capabilities', arguments: { query: 'popup' } } });
     const caps = await until((m) => m.id === 3);
     assert.ok(JSON.stringify(caps.result).length > 200, 'capabilities query returned content');
+
+    send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'example_app', arguments: { query: 'app 044' } } });
+    const ex = await until((m) => m.id === 4);
+    assert.ok(JSON.stringify(ex.result).includes('z2ui5_cl_ai_app_044'), 'example_app resolved the cited port');
   } finally {
     p.kill();
   }

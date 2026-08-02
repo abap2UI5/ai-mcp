@@ -3,8 +3,14 @@
 // test/smoke.test.mjs and DOES need the siblings.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { stripJsonc, BENIGN, deployApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
+import { rankExamplePorts } from '../lib/example-app.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // ------------------------------------------------------------ stripJsonc ----
 
@@ -72,6 +78,69 @@ test('searchCapabilities filters by status and by AND-ed query terms', () => {
   assert.equal(hit.length, 1);
   assert.equal(hit[0].feature, 'Dialogs');
   assert.equal(searchCapabilities({ query: 'nonexistent thing', rawText: CAPS_FIXTURE }).length, 0);
+});
+
+// --------------------------------------------------- example_app ranking ----
+// rankExamplePorts is pure: the fixtures stand in for the meta/ sidecars and
+// CAPABILITIES.md, so the ranking is testable without the ai-demokit sibling.
+
+const PORT_METAS = [
+  { class: 'z2ui5_cl_ai_app_044', sample: 'sap.m.sample.PDFViewerPopup', entity: 'sap.m.PDFViewer', deviations: [{ type: 'NOTE', what: 'popup mode via follow_up_action' }] },
+  { class: 'z2ui5_cl_ai_app_045', sample: 'sap.m.sample.RangeSlider', entity: 'sap.m.RangeSlider', deviations: [] },
+  { class: 'z2ui5_cl_ai_app_051', sample: 'sap.m.sample.Table', entity: 'sap.m.Table', deviations: [] },
+];
+const PORT_CAPS = [
+  '| UI5 feature | Status | How | Evidence |',
+  '|---|---|---|---|',
+  '| Composite range properties | ok | split into scalars | app 045 |',
+].join('\n');
+
+test('rankExamplePorts pins an explicit app number', () => {
+  const ranked = rankExamplePorts({ query: 'app 44', metas: PORT_METAS });
+  assert.equal(ranked[0].class, 'z2ui5_cl_ai_app_044');
+});
+
+test('rankExamplePorts matches sidecar fields, all-terms hits first', () => {
+  const ranked = rankExamplePorts({ query: 'pdf popup', metas: PORT_METAS });
+  assert.equal(ranked[0].class, 'z2ui5_cl_ai_app_044');
+});
+
+test('rankExamplePorts promotes the port a matching CAPABILITIES.md row cites', () => {
+  const ranked = rankExamplePorts({ query: 'composite range', metas: PORT_METAS, capabilitiesText: PORT_CAPS });
+  assert.equal(ranked[0].class, 'z2ui5_cl_ai_app_045');
+});
+
+test('rankExamplePorts returns nothing for an empty or unmatched query', () => {
+  assert.deepEqual(rankExamplePorts({ query: '', metas: PORT_METAS }), []);
+  assert.deepEqual(rankExamplePorts({ query: 'zzzz-not-there', metas: PORT_METAS }), []);
+});
+
+// ------------------------------------------- server.mjs contract gates ----
+// The tool list in the server.mjs header comment and the server version are
+// maintained by hand (AGENTS.md maintenance traps) - gate the drift here.
+
+function serverSource() {
+  return fs.readFileSync(path.join(ROOT, 'server.mjs'), 'utf8');
+}
+
+test('header-comment tool list exactly matches the TOOLS array', () => {
+  const src = serverSource();
+  const header = src.slice(0, src.indexOf('*/'));
+  const documented = [...header.matchAll(/^ \* {3}([a-z_]+) {2,}\S/gm)].map((m) => m[1]);
+  const toolsBlock = src.slice(src.indexOf('const TOOLS = ['), src.indexOf('\n];'));
+  const declared = [...toolsBlock.matchAll(/name: '([a-z_]+)'/g)].map((m) => m[1]);
+  assert.ok(declared.length > 0, 'TOOLS array parsed');
+  // same set of names (the two lists group differently, so order-insensitive)
+  assert.deepEqual([...documented].sort(), [...declared].sort(), 'server.mjs header comment tool list drifted from the TOOLS array');
+  assert.equal(new Set(declared).size, declared.length, 'duplicate tool name in TOOLS');
+});
+
+test('server version matches package.json', () => {
+  const src = serverSource();
+  const m = src.match(/name: 'abap2ui5', version: '([^']+)'/);
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.ok(m, 'server version literal found');
+  assert.equal(m[1], pkg.version, 'server.mjs version drifted from package.json');
 });
 
 // ------------------------------------------------- deployApp validation ----
