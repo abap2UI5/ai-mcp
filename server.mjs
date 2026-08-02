@@ -112,7 +112,9 @@ const TOOLS = [
       'Fast static validation via abap2UI5-linter, BEFORE the build/run loop: reconstructs the view from the ' +
       'z2ui5_cl_ai_xml builder calls (or takes raw view XML), runs the UI5 property gate (@since floor, ' +
       'deprecation) and renders it headless with a typed mock model. Seconds instead of a build+boot — use it ' +
-      'after writing ABAP, then deploy_app once it is clean.',
+      'after writing ABAP, then deploy_app once it is clean. Each finding carries severity (error = the app ' +
+      'breaks, warning = not necessarily on your target UI5, hint = advisory), a message and the line/column ' +
+      'in the source you passed in; ok is false while any error or warning is left (hints are advisory).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -280,13 +282,28 @@ async function handle(name, args = {}) {
           }
         }
       }
+      /* Every finding carries its severity, a ready-made message and (where
+       * the gate could place it) line/column. ok follows the linter's own
+       * default threshold: errors AND warnings block. A warning here means
+       * "not on the UI5 version you target" - and the system the agent
+       * targets is the entire point of this gate, so it is not advisory.
+       * Only hints are: nothing handling an event is a dead control, unless
+       * the roundtrip alone was the intention, which the agent may know. */
+      const counts = { error: result.renderErrors.length, warning: 0, hint: 0 };
+      for (const f of result.findings) counts[f.severity || 'error']++;
       return text({
-        ok: result.findings.length === 0 && result.renderErrors.length === 0,
+        ok: counts.error === 0 && counts.warning === 0,
+        counts,
         findings: result.findings,
         renderErrors: result.renderErrors,
         reconstructedDocs: result.docs.length,
         skippedRender: result.helperTokens > 0 ? `view parts in helper methods (${result.helperTokens} calls) — not statically reconstructable` : undefined,
         notes: result.notes,
+        hint: counts.error === 0 && counts.warning > 0
+          ? 'what is left is about the UI5 version you target: fix it, raise min_ui5 if the system is newer, or accept it via allow'
+          : counts.error === 0 && counts.hint > 0
+            ? 'hints are advisory - an event without a handler is intended when the roundtrip alone is the point'
+            : undefined,
       });
     }
     case 'build_backend': {

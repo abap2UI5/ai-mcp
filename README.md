@@ -44,7 +44,7 @@ claude mcp add abap2ui5 -- node /path/to/ai-mcp/server.mjs
 | `capabilities` | Query the verified capability map (ai-demokit CAPABILITIES.md, parsed live — no drift). Ask before assuming a UI5 feature is impossible: `{ query: "tree binding" }`, `{ status: "not-expressible" }` |
 | `generation_rules` | The rulebook for writing an app with the generic view builder |
 | `scope_of` | In/out-of-scope verdict for UI5 controls (since <= 1.71, not deprecated) |
-| `validate_view` | **Seconds, not minutes**: static property gate + headless render via abap2UI5-linter, from ABAP source or raw XML — run this after writing, before deploying |
+| `validate_view` | **Seconds, not minutes**: static property gate + headless render via abap2UI5-linter, from ABAP source or raw XML — run this after writing, before deploying. Findings come with a severity, a message and the line/column in the source you passed in |
 | `deploy_app` | Write `<class>.clas.abap` + abapGit sidecar into the gitignored sandbox `src/zz_dev/` (in the ai-demokit checkout), then abaplint it |
 | `build_backend` | Rebuild the transpiled Node backend. `mode: auto` is **incremental** after the first full build (~1-2 min per iteration); `mode: full` runs the complete e2e-build |
 | `run_app` | Boot any app class headless (`?app_start=<class>`), return boot status, real page errors (benign UI5 noise filtered) and a full-page **screenshot as an image** |
