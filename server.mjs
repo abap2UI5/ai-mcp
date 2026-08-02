@@ -247,7 +247,7 @@ async function handle(name, args = {}) {
     case 'validate_view': {
       const vc = resolveViewCheck();
       if (!vc) {
-        return toolError('abap2UI5-linter checkout not found — set AI_VIEW_CHECK_HOME or clone https://github.com/abap2UI5/abap2UI5-linter as a sibling');
+        return toolError('abap2UI5-linter checkout not found — set AI_VIEW_CHECK_HOME or clone https://github.com/abap2UI5/linter as a sibling');
       }
       if (!args.abap_source && !args.xml) return toolError('pass abap_source or xml');
       const lib = await import(path.join(vc, 'lib', 'index.mjs'));

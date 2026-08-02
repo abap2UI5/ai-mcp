@@ -15,7 +15,7 @@ boots it in a real browser and **looks at the screenshot** — then iterates.
 Everything runs locally on infrastructure that already guards the abap2UI5
 ecosystem in CI: the abaplint transpiler + open-abap runtime, the framework's
 express shim, the [ai-demokit](https://github.com/abap2UI5/ai-demokit) build
-and boot gates, and the [abap2UI5-linter](https://github.com/abap2UI5/abap2UI5-linter)
+and boot gates, and the [abap2UI5-linter](https://github.com/abap2UI5/linter)
 validation core.
 
 ## Setup
@@ -23,11 +23,11 @@ validation core.
 The server orchestrates sibling checkouts (override locations with env vars):
 
 ```sh
-git clone https://github.com/abap2UI5/abap2UI5        # A2UI5_HOME
-git clone https://github.com/abap2UI5/ai-demokit      # AI_DEMOKIT_HOME
-git clone https://github.com/abap2UI5/abap2UI5-linter # AI_VIEW_CHECK_HOME (required for validate_view)
+git clone https://github.com/abap2UI5/abap2UI5   # A2UI5_HOME
+git clone https://github.com/abap2UI5/ai-demokit # AI_DEMOKIT_HOME
+git clone https://github.com/abap2UI5/linter     # AI_VIEW_CHECK_HOME (required for validate_view)
 git clone https://github.com/abap2UI5/ai-mcp
-cd abap2UI5 && npm ci && cd ../ai-demokit && npm ci && cd ../abap2UI5-linter && npm ci && cd ../ai-mcp && npm ci
+cd abap2UI5 && npm ci && cd ../ai-demokit && npm ci && cd ../linter && npm ci && cd ../ai-mcp && npm ci
 npx playwright install chromium
 ```
 
@@ -81,5 +81,5 @@ existing port, look at it, then build mine".
   a system chromium (`A2UI5_MCP_CHROMIUM` overrides the executable path).
 - **Real system deployment** stays what it is today: abapGit. This server is
   the inner dev loop; a `run_app_system` backend (launch URL + auth proxy, as
-  solved in the [VS Code extension](https://github.com/abap2UI5-addons/vscode-extension))
+  solved in the [VS Code extension](https://github.com/abap2UI5/vscode-extension))
   is the planned second stage.
