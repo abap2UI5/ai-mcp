@@ -11,7 +11,7 @@
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
  *   generation_rules  the porting/building rulebook (generation-prompt.txt)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
- *   validate_view     static gates via ai-view-check (properties + render)
+ *   validate_view     static gates via abap2UI5-linter (properties + render)
  *   deploy_app        write an app class into src/zz_dev/ (+ optional lint)
  *   build_backend     transpile framework + apps to the Node backend (e2e-build)
  *   run_app           boot the app headless, return page errors + a SCREENSHOT
@@ -108,7 +108,7 @@ const TOOLS = [
   {
     name: 'validate_view',
     description:
-      'Fast static validation via ai-view-check, BEFORE the build/run loop: reconstructs the view from the ' +
+      'Fast static validation via abap2UI5-linter, BEFORE the build/run loop: reconstructs the view from the ' +
       'z2ui5_cl_ai_xml builder calls (or takes raw view XML), runs the UI5 property gate (@since floor, ' +
       'deprecation) and renders it headless with a typed mock model. Seconds instead of a build+boot — use it ' +
       'after writing ABAP, then deploy_app once it is clean.',
@@ -244,7 +244,7 @@ async function handle(name, args = {}) {
     case 'validate_view': {
       const vc = resolveViewCheck();
       if (!vc) {
-        return toolError('ai-view-check checkout not found — set AI_VIEW_CHECK_HOME or clone https://github.com/abap2UI5/ai-view-check as a sibling');
+        return toolError('abap2UI5-linter checkout not found — set AI_VIEW_CHECK_HOME or clone https://github.com/abap2UI5/abap2UI5-linter as a sibling');
       }
       if (!args.abap_source && !args.xml) return toolError('pass abap_source or xml');
       const lib = await import(path.join(vc, 'lib', 'index.mjs'));
