@@ -25,7 +25,7 @@ The server orchestrates sibling checkouts (override locations with env vars):
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5        # A2UI5_HOME
 git clone https://github.com/abap2UI5/ai-demokit      # AI_DEMOKIT_HOME
-git clone https://github.com/abap2UI5/abap2UI5-linter # AI_VIEW_CHECK_HOME (optional, for validate_view)
+git clone https://github.com/abap2UI5/abap2UI5-linter # AI_VIEW_CHECK_HOME (required for validate_view)
 git clone https://github.com/abap2UI5/ai-mcp
 cd abap2UI5 && npm ci && cd ../ai-demokit && npm ci && cd ../abap2UI5-linter && npm ci && cd ../ai-mcp && npm ci
 npx playwright install chromium
