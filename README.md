@@ -15,7 +15,7 @@ boots it in a real browser and **looks at the screenshot** — then iterates.
 Everything runs locally on infrastructure that already guards the abap2UI5
 ecosystem in CI: the abaplint transpiler + open-abap runtime, the framework's
 express shim, the [ai-demokit](https://github.com/abap2UI5/ai-demokit) build
-and boot gates, and the [ai-view-check](https://github.com/abap2UI5/ai-view-check)
+and boot gates, and the [abap2UI5-linter](https://github.com/abap2UI5/abap2UI5-linter)
 validation core.
 
 ## Setup
@@ -25,9 +25,9 @@ The server orchestrates sibling checkouts (override locations with env vars):
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5        # A2UI5_HOME
 git clone https://github.com/abap2UI5/ai-demokit      # AI_DEMOKIT_HOME
-git clone https://github.com/abap2UI5/ai-view-check   # AI_VIEW_CHECK_HOME (optional, for validate_view)
+git clone https://github.com/abap2UI5/abap2UI5-linter # AI_VIEW_CHECK_HOME (optional, for validate_view)
 git clone https://github.com/abap2UI5/ai-mcp
-cd abap2UI5 && npm ci && cd ../ai-demokit && npm ci && cd ../ai-view-check && npm ci && cd ../ai-mcp && npm ci
+cd abap2UI5 && npm ci && cd ../ai-demokit && npm ci && cd ../abap2UI5-linter && npm ci && cd ../ai-mcp && npm ci
 npx playwright install chromium
 ```
 
@@ -44,7 +44,7 @@ claude mcp add abap2ui5 -- node /path/to/ai-mcp/server.mjs
 | `capabilities` | Query the verified capability map (ai-demokit CAPABILITIES.md, parsed live — no drift). Ask before assuming a UI5 feature is impossible: `{ query: "tree binding" }`, `{ status: "not-expressible" }` |
 | `generation_rules` | The rulebook for writing an app with the generic view builder |
 | `scope_of` | In/out-of-scope verdict for UI5 controls (since <= 1.71, not deprecated) |
-| `validate_view` | **Seconds, not minutes**: static property gate + headless render via ai-view-check, from ABAP source or raw XML — run this after writing, before deploying |
+| `validate_view` | **Seconds, not minutes**: static property gate + headless render via abap2UI5-linter, from ABAP source or raw XML — run this after writing, before deploying |
 | `deploy_app` | Write `<class>.clas.abap` + abapGit sidecar into the gitignored sandbox `src/zz_dev/` (in the ai-demokit checkout), then abaplint it |
 | `build_backend` | Rebuild the transpiled Node backend. `mode: auto` is **incremental** after the first full build (~1-2 min per iteration); `mode: full` runs the complete e2e-build |
 | `run_app` | Boot any app class headless (`?app_start=<class>`), return boot status, real page errors (benign UI5 noise filtered) and a full-page **screenshot as an image** |
