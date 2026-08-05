@@ -23,12 +23,13 @@
  */
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { spawn } from 'child_process';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
-import { resolveAiDemokit, resolveViewCheck, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveAiDemokit, resolveViewCheck, importViewCheck, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
   removeApp,
@@ -114,7 +115,8 @@ const TOOLS = [
       'deprecation) and renders it headless with a typed mock model. Seconds instead of a build+boot — use it ' +
       'after writing ABAP, then deploy_app once it is clean. Each finding carries severity (error = the app ' +
       'breaks, warning = not necessarily on your target UI5, hint = advisory), a message and the line/column ' +
-      'in the source you passed in; ok is false while any error or warning is left (hints are advisory).',
+      'in the source you passed in; ok is false while any error or warning is left (hints are advisory). ' +
+      'The checked project\'s abap2ui5lint.jsonc (rule overrides, allow list, UI5 floor) is honoured; explicit arguments win.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -245,60 +247,65 @@ async function handle(name, args = {}) {
       return text(reply);
     }
     case 'validate_view': {
-      const vc = resolveViewCheck();
-      if (!vc) {
+      if (!resolveViewCheck()) {
         return toolError('abap2UI5-linter checkout not found — set AI_VIEW_CHECK_HOME or clone https://github.com/abap2UI5/linter as a sibling');
       }
       if (!args.abap_source && !args.xml) return toolError('pass abap_source or xml');
-      const lib = await import(path.join(vc, 'lib', 'index.mjs'));
-      const opts = {
-        minUi5: args.min_ui5 || '1.71',
-        allow: args.allow || [],
-        render: args.render !== false,
-        properties: true,
-        snapshot: path.join(vc, 'data', 'properties.json'),
-      };
-      let result;
-      if (args.xml) {
-        result = lib.checkXmlSource(args.xml, opts);
-        if (opts.render) {
-          const { openRenderer } = await import(path.join(vc, 'lib', 'render.mjs'));
-          const renderer = await openRenderer();
-          try {
-            for (const xml of result.docs) result.renderErrors.push(...(await renderer.render({ xml, model: {} })));
-          } finally {
-            await renderer.close();
-          }
-        }
-      } else {
-        result = lib.checkAbapSource(args.abap_source, opts);
-        if (opts.render && result.docs.length && result.helperTokens === 0) {
-          const { openRenderer } = await import(path.join(vc, 'lib', 'render.mjs'));
-          const renderer = await openRenderer();
-          try {
-            for (const xml of result.docs) result.renderErrors.push(...(await renderer.render({ xml, model: result.model })));
-          } finally {
-            await renderer.close();
-          }
-        }
+      /* All through the linter's public surface (its package exports map):
+       * checkFiles carries the render pool, the helper-method skip and the
+       * render-error waivers; findings/config carry severity and project
+       * config semantics. No internal file paths, no re-derived logic. */
+      const lib = await importViewCheck('.');
+      const { severityOf, severityRank, SEVERITIES } = await importViewCheck('./findings');
+      const { findConfigFrom, loadConfig, applyConfig } = await importViewCheck('./config');
+
+      // explicit tool arguments win; the checked project's abap2ui5lint.jsonc
+      // fills the rest — an agent must not report findings the project's own
+      // CI has deliberately configured away
+      const opt = { minUi5: '1.71', allow: [], render: true, properties: true };
+      const seen = new Set(['properties']);
+      if (args.min_ui5) { opt.minUi5 = args.min_ui5; seen.add('minUi5'); }
+      if (args.allow) opt.allow = args.allow;
+      if (args.render === false) { opt.render = false; seen.add('render'); }
+      const demokit = resolveAiDemokit();
+      const configFile = demokit ? findConfigFrom(demokit) : null;
+      if (configFile) {
+        const cfg = loadConfig(configFile);
+        delete cfg.baseline; // baseline is a repo-workflow concern; new source has no baseline entry
+        applyConfig(opt, seen, cfg);
       }
+
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-validate-'));
+      const file = path.join(dir, args.xml ? 'source.view.xml' : 'source.clas.abap');
+      let result;
+      try {
+        fs.writeFileSync(file, args.xml || args.abap_source);
+        [result] = await lib.checkFiles([file], opt);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+
       /* Every finding carries its severity, a ready-made message and (where
-       * the gate could place it) line/column. ok follows the linter's own
-       * default threshold: errors AND warnings block. A warning here means
-       * "not on the UI5 version you target" - and the system the agent
-       * targets is the entire point of this gate, so it is not advisory.
-       * Only hints are: nothing handling an event is a dead control, unless
-       * the roundtrip alone was the intention, which the agent may know. */
-      const counts = { error: result.renderErrors.length, warning: 0, hint: 0 };
-      for (const f of result.findings) counts[f.severity || 'error']++;
+       * the gate could place it) line/column. ok follows the linter's failOn
+       * threshold (project-configurable, default: errors AND warnings block).
+       * A warning here means "not on the UI5 version you target" - and the
+       * system the agent targets is the entire point of this gate, so it is
+       * not advisory. Only hints are: nothing handling an event is a dead
+       * control, unless the roundtrip alone was the intention. */
+      const counts = { error: 0, warning: 0, hint: 0 };
+      for (const f of result.findings) counts[severityOf(f)]++;
+      counts[result.renderSeverity || 'error'] += result.renderErrors.length;
+      const failOn = opt.failOn || 'warning';
+      const ok = failOn === 'never' || SEVERITIES.slice(severityRank(failOn)).every((s) => counts[s] === 0);
       return text({
-        ok: counts.error === 0 && counts.warning === 0,
+        ok,
         counts,
         findings: result.findings,
         renderErrors: result.renderErrors,
         reconstructedDocs: result.docs.length,
-        skippedRender: result.helperTokens > 0 ? `view parts in helper methods (${result.helperTokens} calls) — not statically reconstructable` : undefined,
+        skippedRender: result.skippedRender ? `view parts in helper methods (${result.helperTokens} calls) — not statically reconstructable` : undefined,
         notes: result.notes,
+        config: configFile || undefined,
         hint: counts.error === 0 && counts.warning > 0
           ? 'what is left is about the UI5 version you target: fix it, raise min_ui5 if the system is newer, or accept it via allow'
           : counts.error === 0 && counts.hint > 0

@@ -7,10 +7,11 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAiDemokit } from '../lib/repos.mjs';
+import { resolveAiDemokit, resolveViewCheck } from '../lib/repos.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HAVE_DEMOKIT = !!resolveAiDemokit();
+const HAVE_LINTER = !!resolveViewCheck();
 
 test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEMOKIT && 'ai-demokit sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
@@ -55,6 +56,25 @@ test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEM
     send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'capabilities', arguments: { query: 'popup' } } });
     const caps = await until((m) => m.id === 3);
     assert.ok(JSON.stringify(caps.result).length > 200, 'capabilities query returned content');
+
+    // validate_view through the linter checkout's public exports (property
+    // gate only — render needs a browser, which this smoke does not assume)
+    if (HAVE_LINTER) {
+      send({
+        jsonrpc: '2.0', id: 4, method: 'tools/call',
+        params: {
+          name: 'validate_view',
+          arguments: {
+            xml: '<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m"><Page title="smoke"/></mvc:View>',
+            render: false,
+          },
+        },
+      });
+      const vv = await until((m) => m.id === 4, 15000);
+      assert.ok(!vv.result.isError, `validate_view errored: ${JSON.stringify(vv.result.content)}`);
+      const body = JSON.parse(vv.result.content[0].text);
+      assert.equal(body.ok, true, `clean view must validate ok: ${vv.result.content[0].text}`);
+    }
   } finally {
     p.kill();
   }
