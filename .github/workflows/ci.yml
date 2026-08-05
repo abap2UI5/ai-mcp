@@ -1,7 +1,12 @@
-# Unit tests for the sibling-free units (stripJsonc, the CAPABILITIES.md
-# parser, deployApp validation, the BENIGN console filter). The stdio smoke
-# in test/smoke.test.mjs skips itself here - it needs the ai-demokit sibling
-# checkout, which a bare CI checkout does not have.
+# Two jobs:
+#   test  — the sibling-free units (stripJsonc, the CAPABILITIES.md parser,
+#           deployApp validation, the BENIGN console filter) on a bare
+#           checkout; proves the server degrades cleanly with nothing around.
+#   smoke — the same suite in a sibling workspace (ai-demokit + linter cloned
+#           next to this checkout), so the stdio smoke actually runs: MCP
+#           handshake, a live CAPABILITIES.md query, and validate_view through
+#           the linter's public exports. This is the job that catches a
+#           sibling drifting away from what this server consumes.
 name: ci
 
 on:
@@ -27,3 +32,23 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm test
+
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ai-mcp
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # the siblings this server orchestrates — tip of main, exactly what a
+      # user following the README ends up with. The linter's property gate is
+      # dependency-free at import time, so a bare clone suffices.
+      - run: git clone --depth 1 https://github.com/abap2UI5/ai-demokit
+      - run: git clone --depth 1 https://github.com/abap2UI5/linter
+      - run: npm ci
+        working-directory: ai-mcp
+      - run: npm test
+        working-directory: ai-mcp
