@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/unit.test.mjs test/smoke.test.mjs"
+    "test": "node --test \"test/*.test.mjs\""
   },
   "repository": {
     "type": "git",
@@ -16,7 +16,7 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/abap2UI5/abap2UI5/issues"
+    "url": "https://github.com/abap2UI5/ai-mcp/issues"
   },
   "homepage": "https://github.com/abap2UI5/ai-mcp#readme",
   "dependencies": {

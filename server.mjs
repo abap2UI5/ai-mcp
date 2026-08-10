@@ -24,17 +24,17 @@
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { spawn } from 'child_process';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
-import { resolveAiDemokit, resolveViewCheck, importViewCheck, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveAiDemokit, resolveA2UI5, resolveViewCheck, importViewCheck, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
   removeApp,
   listDevApps,
   lintApp,
+  runScopeOf,
   buildBackend,
   backendBuilt,
   backendStatus,
@@ -135,7 +135,11 @@ const TOOLS = [
       'incremental when a prior full build exists: only src/zz_dev/ is re-copied and re-transpiled (~1-2 min). ' +
       'mode full runs the complete e2e-build (downport + transpile, tens of minutes) — needed once initially, or ' +
       'when framework/port sources changed, or when the incremental transpile rejects a construct (then simplify ' +
-      'the ABAP or go full). Stops a running backend first.',
+      'the ABAP or go full). Stops a running backend first. Only one build runs at a time: a second call with the ' +
+      'same effective mode joins the in-flight build and returns its result; a call with a different mode fails ' +
+      'fast with "build in progress" — retry when the running build has finished (a full build is never silently ' +
+      'downgraded to an incremental result, and vice versa). Long builds emit MCP progress notifications (at most ' +
+      'one per second, carrying the latest build output line) when the call includes a progressToken.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -190,19 +194,62 @@ function toolError(message) {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
-async function runScopeOf(entities) {
-  return new Promise((resolve) => {
-    const child = spawn('node', [path.join(resolveAiDemokit(), 'scripts', 'scope-of.mjs'), ...entities], { cwd: resolveAiDemokit() });
-    let out = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (out += d));
-    child.on('close', (code) => resolve({ code, out: out.trim() }));
-  });
+/* Every tool that reads a sibling checkout degrades to the same clear,
+ * actionable error when the checkout is missing (instead of a TypeError from
+ * path.join(null, ...)): which repo is absent, how to clone it, which env var
+ * points at an existing checkout. The server itself always starts. */
+const SIBLING_REPOS = {
+  'ai-demokit': {
+    resolve: resolveAiDemokit,
+    hint: 'clone https://github.com/abap2UI5/ai-demokit as a sibling of ai-mcp, or point AI_DEMOKIT_HOME at an existing checkout',
+  },
+  abap2UI5: {
+    resolve: resolveA2UI5,
+    hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of ai-mcp (or run `npm run node:setup` in ai-demokit), or point A2UI5_HOME at an existing checkout',
+  },
+  linter: {
+    resolve: resolveViewCheck,
+    hint: 'clone https://github.com/abap2UI5/linter as a sibling of ai-mcp, or point AI_VIEW_CHECK_HOME at an existing checkout',
+  },
+};
+
+function missingSibling(...repos) {
+  for (const name of repos) {
+    const { resolve, hint } = SIBLING_REPOS[name];
+    if (!resolve()) return toolError(`${name} checkout not found — ${hint}`);
+  }
+  return null;
 }
 
-async function handle(name, args = {}) {
+/* Throttled MCP progress from a long child's output: one
+ * notifications/progress per second at most, carrying the latest line as the
+ * message and the number of lines seen so far as the (open-ended) progress
+ * counter. Only wired up when the client asked for progress by sending a
+ * progressToken (the MCP contract); notification failures never fail the
+ * build. */
+function progressReporter({ progressToken, sendNotification }) {
+  if (progressToken === undefined || progressToken === null || !sendNotification) return undefined;
+  let lines = 0;
+  let lastSent = 0;
+  return (line) => {
+    lines += 1;
+    const now = Date.now();
+    if (now - lastSent < 1000) return;
+    lastSent = now;
+    Promise.resolve(
+      sendNotification({
+        method: 'notifications/progress',
+        params: { progressToken, progress: lines, message: String(line).slice(0, 300) },
+      }),
+    ).catch(() => {});
+  };
+}
+
+async function handle(name, args = {}, ctx = {}) {
   switch (name) {
     case 'capabilities': {
+      const miss = missingSibling('ai-demokit');
+      if (miss) return miss;
       if (!args.query && !args.status) {
         const s = capabilitySummary();
         return text({
@@ -214,6 +261,8 @@ async function handle(name, args = {}) {
       return text({ matches: hits.length, entries: hits });
     }
     case 'generation_rules': {
+      const miss = missingSibling('ai-demokit');
+      if (miss) return miss;
       const p = path.join(resolveAiDemokit(), 'scripts', 'generation-prompt.txt');
       const rules = fs.readFileSync(p, 'utf8');
       return text(
@@ -223,12 +272,16 @@ async function handle(name, args = {}) {
       );
     }
     case 'scope_of': {
+      const miss = missingSibling('ai-demokit');
+      if (miss) return miss;
       const entities = args.entities || [];
       if (!entities.length) return toolError('pass at least one entity, e.g. ["sap.m.Wizard"]');
       const { code, out } = await runScopeOf(entities);
       return text(`${out}\n\n(exit ${code}: 0 = all in scope, 1 = at least one out of scope or unresolved)`);
     }
     case 'deploy_app': {
+      const miss = missingSibling('ai-demokit');
+      if (miss) return miss;
       const res = deployApp({
         className: args.class_name,
         source: args.abap_source,
@@ -247,9 +300,8 @@ async function handle(name, args = {}) {
       return text(reply);
     }
     case 'validate_view': {
-      if (!resolveViewCheck()) {
-        return toolError('abap2UI5-linter checkout not found — set AI_VIEW_CHECK_HOME or clone https://github.com/abap2UI5/linter as a sibling');
-      }
+      const miss = missingSibling('linter');
+      if (miss) return miss;
       if (!args.abap_source && !args.xml) return toolError('pass abap_source or xml');
       /* All through the linter's public surface (its package exports map):
        * checkFiles carries the render pool, the helper-method skip and the
@@ -314,12 +366,20 @@ async function handle(name, args = {}) {
       });
     }
     case 'build_backend': {
+      // the build pipeline lives in ai-demokit; the abap2UI5 checkout is
+      // resolved (and clearly reported) by the build itself, which can also
+      // bootstrap the in-repo .abap2UI5 clone on a full build
+      const miss = missingSibling('ai-demokit');
+      if (miss) return miss;
       await stopBackend();
-      const res = await buildBackend({ mode: args.mode || 'auto' });
+      const res = await buildBackend({ mode: args.mode || 'auto', onLine: progressReporter(ctx) });
       if (!res.ok) return toolError(`build failed (exit ${res.code}, mode ${res.mode || args.mode}):\n${res.tail}`);
       return text({ built: true, mode: res.mode, next: 'run_app { class_name } to boot and screenshot the app', tail: res.tail.split('\n').slice(-5).join('\n') });
     }
     case 'run_app': {
+      // ai-demokit serves the local @openui5 modules, abap2UI5 the backend
+      const miss = missingSibling('ai-demokit', 'abap2UI5');
+      if (miss) return miss;
       const res = await runApp({ className: args.class_name, timeoutMs: args.timeout_ms || 60000 });
       const report = {
         class: res.class,
@@ -334,6 +394,11 @@ async function handle(name, args = {}) {
     }
     case 'backend': {
       const action = args.action || 'status';
+      if (action === 'start' || action === 'restart') {
+        // status/stop work without any checkout; starting needs the backend
+        const miss = missingSibling('abap2UI5');
+        if (miss) return miss;
+      }
       if (action === 'start') return text(await startBackend());
       if (action === 'stop') return text(await stopBackend());
       if (action === 'restart') {
@@ -343,6 +408,8 @@ async function handle(name, args = {}) {
       return text(backendStatus());
     }
     case 'remove_app': {
+      const miss = missingSibling('ai-demokit');
+      if (miss) return miss;
       if (!args.class_name) return text({ devApps: listDevApps() });
       const removed = removeApp(args.class_name);
       return text({ removed, note: removed ? 'run build_backend to update the served backend' : 'no such dev app' });
@@ -352,15 +419,21 @@ async function handle(name, args = {}) {
   }
 }
 
+// the served version IS the package version — no hand-maintained copy to drift
+const PKG = JSON.parse(fs.readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8'));
+
 const server = new Server(
-  { name: 'abap2ui5', version: '0.1.0' },
+  { name: 'abap2ui5', version: PKG.version },
   { capabilities: { tools: {} } },
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
+server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
   try {
-    return await handle(req.params.name, req.params.arguments || {});
+    return await handle(req.params.name, req.params.arguments || {}, {
+      progressToken: req.params._meta && req.params._meta.progressToken,
+      sendNotification: extra && extra.sendNotification,
+    });
   } catch (e) {
     return toolError(String((e && e.message) || e));
   }
