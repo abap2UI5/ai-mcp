@@ -419,8 +419,11 @@ async function handle(name, args = {}, ctx = {}) {
   }
 }
 
+// the served version IS the package version — no hand-maintained copy to drift
+const PKG = JSON.parse(fs.readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8'));
+
 const server = new Server(
-  { name: 'abap2ui5', version: '0.1.0' },
+  { name: 'abap2ui5', version: PKG.version },
   { capabilities: { tools: {} } },
 );
 

@@ -5,13 +5,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAiDemokit, resolveViewCheck } from '../lib/repos.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const HAVE_DEMOKIT = !!resolveAiDemokit();
 const HAVE_LINTER = !!resolveViewCheck();
+
+// the complete tool surface — a new/renamed/dropped tool must show up here
+export const TOOL_NAMES = [
+  'backend',
+  'build_backend',
+  'capabilities',
+  'deploy_app',
+  'generation_rules',
+  'remove_app',
+  'run_app',
+  'scope_of',
+  'validate_view',
+];
 
 test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEMOKIT && 'ai-demokit sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
@@ -48,10 +63,11 @@ test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEM
     send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } } });
     const init = await until((m) => m.id === 1);
     assert.equal(init.result.serverInfo.name, 'abap2ui5');
+    assert.equal(init.result.serverInfo.version, PKG.version, 'served version must be the package.json version');
 
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const list = await until((m) => m.id === 2);
-    assert.equal(list.result.tools.length, 9);
+    assert.deepEqual(list.result.tools.map((t) => t.name).sort(), TOOL_NAMES);
 
     send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'capabilities', arguments: { query: 'popup' } } });
     const caps = await until((m) => m.id === 3);

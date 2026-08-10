@@ -123,10 +123,12 @@ legitimately slower.
 
 ## Maintenance traps (learned, do not repeat)
 
-- The **tool list in the `server.mjs` header comment** and the **server
-  `version`** are duplicated by hand — update both when adding a tool or
-  bumping `package.json` (they have drifted before: a missing `remove_app`
-  row, `1.0.0` vs `0.1.0`).
+- The **tool list in the `server.mjs` header comment** is duplicated by hand
+  — update it when adding a tool (it has drifted before: a missing
+  `remove_app` row). The server `version` is read from `package.json` at
+  startup and asserted by the tests; the exact tool-name set is pinned in
+  `test/smoke.test.mjs` (`TOOL_NAMES`) and `test/missing-siblings.test.mjs`
+  — adding/renaming a tool must update those lists.
 - `lib/repos.mjs` exports **`VIEW_CHECK_DIRS`**: the checker's own directory
   name `linter` plus the **pre-rename aliases** `abap2UI5-linter` and
   `ai-view-check`, in that order. The VS Code extension mirrors the same list
