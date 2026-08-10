@@ -138,7 +138,8 @@ const TOOLS = [
       'the ABAP or go full). Stops a running backend first. Only one build runs at a time: a second call with the ' +
       'same effective mode joins the in-flight build and returns its result; a call with a different mode fails ' +
       'fast with "build in progress" — retry when the running build has finished (a full build is never silently ' +
-      'downgraded to an incremental result, and vice versa).',
+      'downgraded to an incremental result, and vice versa). Long builds emit MCP progress notifications (at most ' +
+      'one per second, carrying the latest build output line) when the call includes a progressToken.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -220,7 +221,31 @@ function missingSibling(...repos) {
   return null;
 }
 
-async function handle(name, args = {}) {
+/* Throttled MCP progress from a long child's output: one
+ * notifications/progress per second at most, carrying the latest line as the
+ * message and the number of lines seen so far as the (open-ended) progress
+ * counter. Only wired up when the client asked for progress by sending a
+ * progressToken (the MCP contract); notification failures never fail the
+ * build. */
+function progressReporter({ progressToken, sendNotification }) {
+  if (progressToken === undefined || progressToken === null || !sendNotification) return undefined;
+  let lines = 0;
+  let lastSent = 0;
+  return (line) => {
+    lines += 1;
+    const now = Date.now();
+    if (now - lastSent < 1000) return;
+    lastSent = now;
+    Promise.resolve(
+      sendNotification({
+        method: 'notifications/progress',
+        params: { progressToken, progress: lines, message: String(line).slice(0, 300) },
+      }),
+    ).catch(() => {});
+  };
+}
+
+async function handle(name, args = {}, ctx = {}) {
   switch (name) {
     case 'capabilities': {
       const miss = missingSibling('ai-demokit');
@@ -347,7 +372,7 @@ async function handle(name, args = {}) {
       const miss = missingSibling('ai-demokit');
       if (miss) return miss;
       await stopBackend();
-      const res = await buildBackend({ mode: args.mode || 'auto' });
+      const res = await buildBackend({ mode: args.mode || 'auto', onLine: progressReporter(ctx) });
       if (!res.ok) return toolError(`build failed (exit ${res.code}, mode ${res.mode || args.mode}):\n${res.tail}`);
       return text({ built: true, mode: res.mode, next: 'run_app { class_name } to boot and screenshot the app', tail: res.tail.split('\n').slice(-5).join('\n') });
     }
@@ -400,9 +425,12 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
+server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
   try {
-    return await handle(req.params.name, req.params.arguments || {});
+    return await handle(req.params.name, req.params.arguments || {}, {
+      progressToken: req.params._meta && req.params._meta.progressToken,
+      sendNotification: extra && extra.sendNotification,
+    });
   } catch (e) {
     return toolError(String((e && e.message) || e));
   }
