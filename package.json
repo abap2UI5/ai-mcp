@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test/unit.test.mjs test/smoke.test.mjs"
+    "test": "node --test \"test/*.test.mjs\""
   },
   "repository": {
     "type": "git",

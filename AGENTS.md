@@ -12,7 +12,10 @@ clients, no SAP system required.
 ai-mcp **bundles no content**. Every tool reads live from sibling checkouts,
 resolved per call in `lib/repos.mjs` (explicit env var, then the `../<name>`
 sibling of this repo — plus, for abap2UI5, the in-repo `.abap2UI5` clone that
-ai-demokit's `npm run node:setup` creates):
+ai-demokit's `npm run node:setup` creates). A **set env var is
+authoritative**: when it points at a directory without the expected checkout,
+the repo resolves to null and the tool reports the misconfiguration — there
+is no silent fallback to the sibling guess.
 
 | Env var | Default sibling | Used for |
 | --- | --- | --- |
@@ -24,10 +27,13 @@ Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
 `A2UI5_MCP_CHROMIUM` (browser path).
 
 A missing checkout degrades **per tool** (the server still starts;
-`resolve*` returns null and the affected tool errors) — `validate_view`
-needs the linter, `build_backend`/`run_app`/`backend` need the core repo,
-almost everything else needs ai-demokit. The README calls the linter
-"optional"; that is true for 7 of 9 tools and fatal for `validate_view`.
+`resolve*` returns null and the affected tool returns a uniform, actionable
+error — which repo, how to clone it, which env var; see `missingSibling` in
+`server.mjs`) — `validate_view` needs the linter, `run_app`/`backend` need
+the core repo, almost everything else needs ai-demokit. The README calls the
+linter "optional"; that is true for 8 of 9 tools and fatal for
+`validate_view`. `test/missing-siblings.test.mjs` pins this contract per
+tool by pointing all three env vars at nonexistent directories.
 
 ### The compatibility surface — renames upstream break tools here silently
 
@@ -75,6 +81,9 @@ npm test             # node --test: sibling-free units + the stdio smoke
 `test/unit.test.mjs` covers the units that need no sibling checkout
 (stripJsonc, the CAPABILITIES.md parser via its rawText parameter, the
 deployApp validation error paths, the BENIGN console filter);
+`test/missing-siblings.test.mjs` boots the real server with the sibling env
+vars pointed at nonexistent directories and asserts every sibling-dependent
+tool degrades with its actionable error (this one runs everywhere);
 `test/smoke.test.mjs` boots the real server over stdio (initialize, 9 tools,
 a capabilities query) and **skips itself when the ai-demokit sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
