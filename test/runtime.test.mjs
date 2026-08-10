@@ -98,6 +98,34 @@ async function withFakeRepos(buildScript, extraEnv, fn) {
   }
 }
 
+test('buildBackend joins a same-mode call and fails fast on a conflicting mode', async () => {
+  await withFakeRepos(
+    'console.log("slow build"); setTimeout(() => process.exit(0), 1500);',
+    {},
+    async () => {
+      const p1 = buildBackend({ mode: 'full' });
+      // same effective mode joins the in-flight build: the identical promise
+      const p2 = buildBackend({ mode: 'full' });
+      assert.equal(p2, p1);
+      // a different mode must NOT silently receive the full build's result
+      const conflict = await buildBackend({ mode: 'incremental' });
+      assert.equal(conflict.ok, false);
+      assert.equal(conflict.inFlight, 'full');
+      assert.match(conflict.tail, /build in progress \(full\)/);
+      assert.match(conflict.tail, /retry when the running build has finished/);
+      const res = await p1;
+      assert.equal(res.ok, true);
+      assert.equal(res.mode, 'full');
+      // the slot is free again: a new conflicting-mode call now starts (and
+      // fails for its own reason — no prior full build in the fake repo —
+      // rather than reporting an in-flight build)
+      const after = await buildBackend({ mode: 'incremental' });
+      assert.equal(after.inFlight, undefined);
+      assert.match(after.tail, /prior full build/);
+    },
+  );
+});
+
 test('buildBackend kills and reports a build that exceeds its timeout', async () => {
   await withFakeRepos(
     'console.log("building forever"); setInterval(() => {}, 1000);',

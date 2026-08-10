@@ -135,7 +135,10 @@ const TOOLS = [
       'incremental when a prior full build exists: only src/zz_dev/ is re-copied and re-transpiled (~1-2 min). ' +
       'mode full runs the complete e2e-build (downport + transpile, tens of minutes) — needed once initially, or ' +
       'when framework/port sources changed, or when the incremental transpile rejects a construct (then simplify ' +
-      'the ABAP or go full). Stops a running backend first.',
+      'the ABAP or go full). Stops a running backend first. Only one build runs at a time: a second call with the ' +
+      'same effective mode joins the in-flight build and returns its result; a call with a different mode fails ' +
+      'fast with "build in progress" — retry when the running build has finished (a full build is never silently ' +
+      'downgraded to an incremental result, and vice versa).',
     inputSchema: {
       type: 'object',
       properties: {
