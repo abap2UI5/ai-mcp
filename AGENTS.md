@@ -24,7 +24,9 @@ is no silent fallback to the sibling guess.
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config` (via `importViewCheck`) |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
-`A2UI5_MCP_CHROMIUM` (browser path).
+`A2UI5_MCP_CHROMIUM` (browser path), and the child-process timeouts
+`A2UI5_MCP_LINT_TIMEOUT_MS` / `A2UI5_MCP_SCOPE_TIMEOUT_MS` (default 5 min)
+and `A2UI5_MCP_BUILD_TIMEOUT_MS` (default 30 min).
 
 A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool returns a uniform, actionable
@@ -112,7 +114,12 @@ validation in `deployApp`, the `BENIGN` console-noise filter.
 
 `build_backend` full build is **tens of minutes** (transpiles the whole
 framework); the incremental path is ~1–2 minutes. Set tool/agent timeouts
-accordingly — a "hung" build is usually just a slow transpile.
+accordingly — a "hung" build is usually just a slow transpile. Every spawned
+child carries its own hard timeout (`spawnWithTimeout` in `lib/runtime.mjs`
+kills the whole process tree on expiry): lint and scope default to 5 minutes
+(`A2UI5_MCP_LINT_TIMEOUT_MS`, `A2UI5_MCP_SCOPE_TIMEOUT_MS`), the build to 30
+minutes (`A2UI5_MCP_BUILD_TIMEOUT_MS`) — raise the env var when a machine is
+legitimately slower.
 
 ## Maintenance traps (learned, do not repeat)
 

@@ -72,6 +72,10 @@ existing port, look at it, then build mine".
   `src/zz_dev/` — nothing an agent deploys can leak into a commit. Promote a
   finished app by moving it into a real package deliberately.
 - **Port:** the backend listens on 3000 (`A2UI5_MCP_PORT` overrides).
+- **Timeouts:** every spawned child is killed (whole process tree) when it
+  exceeds its limit — lint/scope 5 min, build 30 min by default;
+  `A2UI5_MCP_LINT_TIMEOUT_MS`, `A2UI5_MCP_SCOPE_TIMEOUT_MS` and
+  `A2UI5_MCP_BUILD_TIMEOUT_MS` override (values in ms).
 - **UI5 sources:** modules are served from the ai-demokit checkout's
   `@openui5` packages, so booting needs no network. The built theme CSS is
   not in those packages — with network access it loads from the CDN (styled
