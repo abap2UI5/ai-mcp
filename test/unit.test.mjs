@@ -3,7 +3,7 @@
 // test/smoke.test.mjs and DOES need the siblings.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stripJsonc, BENIGN, deployApp } from '../lib/runtime.mjs';
+import { stripJsonc, BENIGN, deployApp, removeApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
 import { CORPUS_DIRS } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
@@ -118,6 +118,25 @@ test('deployApp rejects a class-name/source mismatch', () => {
       }),
     /does not define CLASS z2ui5_cl_demo DEFINITION/,
   );
+});
+
+// ------------------------------------------------- removeApp validation ----
+// remove_app unlinks by name, so it validates the SAME way deploy does. A name
+// carrying path separators must never reach the filesystem: it would resolve
+// out of the src/zz_dev sandbox and delete real corpus sources. Rejection here
+// is what makes that unreachable, so it is asserted rather than assumed.
+
+test('removeApp rejects a name that would escape the dev sandbox', () => {
+  assert.throws(
+    () => removeApp('../../src/01/z2ui5_cl_smpc_app_001'),
+    /invalid class name/,
+  );
+});
+
+test('removeApp rejects the same names deployApp does', () => {
+  for (const bad of ['zcl_my_app', 'z2ui5_cl_' + 'a'.repeat(30), '', 'z2ui5_cl_a/b']) {
+    assert.throws(() => removeApp(bad), /invalid class name/, `expected rejection for '${bad}'`);
+  }
 });
 
 // ------------------------------------------------------- BENIGN filter ----
