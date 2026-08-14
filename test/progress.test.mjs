@@ -14,6 +14,11 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('build_backend emits notifications/progress when the client sends a progressToken', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-progress-'));
+  /* Deliberately the OLD directory name and (below) the old env var: the
+   * corpus repo was renamed twice (ai-demokit -> abap2UI5-api ->
+   * samples-controls) and an install made before that must keep working
+   * untouched. Leave both spellings here — this is the compatibility path's
+   * only coverage, and "modernizing" them would delete the test for it. */
   const demokit = path.join(base, 'ai-demokit');
   fs.mkdirSync(path.join(demokit, 'scripts'), { recursive: true });
   // a build that prints a line every 200ms for ~2.4s — enough for the 1/s throttle

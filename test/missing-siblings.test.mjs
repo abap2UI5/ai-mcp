@@ -22,7 +22,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     stdio: ['pipe', 'pipe', 'ignore'],
     env: {
       ...process.env,
-      AI_DEMOKIT_HOME: path.join(NOWHERE, 'ai-demokit'),
+      SAMPLES_CONTROLS_HOME: path.join(NOWHERE, 'samples-controls'),
       A2UI5_HOME: path.join(NOWHERE, 'abap2UI5'),
       AI_VIEW_CHECK_HOME: path.join(NOWHERE, 'linter'),
     },
@@ -82,23 +82,23 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     const list = await until((m) => m.id === 2);
     assert.deepEqual(
       list.result.tools.map((t) => t.name).sort(),
-      ['backend', 'build_backend', 'capabilities', 'deploy_app', 'generation_rules', 'remove_app', 'run_app', 'scope_of', 'validate_view'],
+      ['backend', 'build_backend', 'capabilities', 'deploy_app', 'generation_rules', 'pitfalls', 'remove_app', 'run_app', 'scope_of', 'validate_view'],
     );
 
-    // ai-demokit-backed tools
-    const DEMOKIT = /ai-demokit checkout not found/;
-    expectMissing(await call('capabilities', {}), DEMOKIT, 'AI_DEMOKIT_HOME');
-    expectMissing(await call('capabilities', { query: 'popup' }), DEMOKIT, 'AI_DEMOKIT_HOME');
-    expectMissing(await call('generation_rules', {}), DEMOKIT, 'AI_DEMOKIT_HOME');
-    expectMissing(await call('scope_of', { entities: ['sap.m.Wizard'] }), DEMOKIT, 'AI_DEMOKIT_HOME');
+    // samples-controls-backed tools
+    const CORPUS = /samples-controls checkout not found/;
+    expectMissing(await call('capabilities', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    expectMissing(await call('capabilities', { query: 'popup' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    expectMissing(await call('generation_rules', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    expectMissing(await call('scope_of', { entities: ['sap.m.Wizard'] }), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(
       await call('deploy_app', { class_name: 'z2ui5_cl_demo', abap_source: 'CLASS z2ui5_cl_demo DEFINITION. INTERFACES z2ui5_if_app.' }),
-      DEMOKIT,
-      'AI_DEMOKIT_HOME',
+      CORPUS,
+      'SAMPLES_CONTROLS_HOME',
     );
-    expectMissing(await call('build_backend', {}), DEMOKIT, 'AI_DEMOKIT_HOME');
-    expectMissing(await call('remove_app', {}), DEMOKIT, 'AI_DEMOKIT_HOME');
-    expectMissing(await call('remove_app', { class_name: 'z2ui5_cl_demo' }), DEMOKIT, 'AI_DEMOKIT_HOME');
+    expectMissing(await call('build_backend', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    expectMissing(await call('remove_app', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    expectMissing(await call('remove_app', { class_name: 'z2ui5_cl_demo' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
 
     // linter-backed tool
     expectMissing(
@@ -107,8 +107,11 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
       'AI_VIEW_CHECK_HOME',
     );
 
-    // abap2UI5-backed tools (run_app checks ai-demokit first — both missing here)
-    expectMissing(await call('run_app', { class_name: 'z2ui5_cl_demo' }), DEMOKIT, 'AI_DEMOKIT_HOME');
+    // abap2UI5-backed tools (run_app checks samples-controls first — both missing here)
+    expectMissing(await call('run_app', { class_name: 'z2ui5_cl_demo' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    // the pitfalls catalogues live in the abap2UI5 checkout, not in the corpus
+    expectMissing(await call('pitfalls', {}), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissing(await call('pitfalls', { area: 'view' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'start' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'restart' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
 
