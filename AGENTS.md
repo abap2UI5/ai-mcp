@@ -12,14 +12,14 @@ clients, no SAP system required.
 ai-mcp **bundles no content**. Every tool reads live from sibling checkouts,
 resolved per call in `lib/repos.mjs` (explicit env var, then the `../<name>`
 sibling of this repo — plus, for abap2UI5, the in-repo `.abap2UI5` clone that
-ai-demokit's `npm run node:setup` creates). A **set env var is
+samples-controls' `npm run node:setup` creates). A **set env var is
 authoritative**: when it points at a directory without the expected checkout,
 the repo resolves to null and the tool reports the misconfiguration — there
 is no silent fallback to the sibling guess.
 
 | Env var | Default sibling | Used for |
 | --- | --- | --- |
-| `AI_DEMOKIT_HOME` | `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
+| `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
 | `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/` |
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config` (via `importViewCheck`) |
 
@@ -32,7 +32,7 @@ A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool returns a uniform, actionable
 error — which repo, how to clone it, which env var; see `missingSibling` in
 `server.mjs`) — `validate_view` needs the linter, `run_app`/`backend` need
-the core repo, almost everything else needs ai-demokit. The README calls the
+the core repo, almost everything else needs samples-controls. The README calls the
 linter "optional"; that is true for 8 of 9 tools and fatal for
 `validate_view`. `test/missing-siblings.test.mjs` pins this contract per
 tool by pointing all three env vars at nonexistent directories.
@@ -42,7 +42,7 @@ tool by pointing all three env vars at nonexistent directories.
 These upstream file names/shapes are load-bearing for ai-mcp. When one
 changes upstream, this repo must change in the same breath:
 
-- ai-demokit: `CAPABILITIES.md` **table format** (4 columns, status emoji —
+- samples-controls: `CAPABILITIES.md` **table format** (4 columns, status emoji —
   parser + legend in `lib/capabilities.mjs`), `scripts/generation-prompt.txt`,
   `scripts/scope-of.mjs` CLI output, `scripts/e2e-build.mjs`, `abaplint.jsonc`,
   the `src/zz_dev/` package convention.
@@ -61,9 +61,9 @@ changes upstream, this repo must change in the same breath:
 The server **writes into the sibling checkouts**. When you (or another
 agent) find these artifacts in a dirty sibling worktree, ai-mcp caused them:
 
-- `<ai-demokit>/.abaplint-mcp-dev.jsonc` — patched lint config for deployed
+- `<samples-controls>/.abaplint-mcp-dev.jsonc` — patched lint config for deployed
   dev apps (gitignored there).
-- `<ai-demokit>/src/zz_dev/*.clas.abap` + `.clas.xml` + `package.devc.xml` —
+- `<samples-controls>/src/zz_dev/*.clas.abap` + `.clas.xml` + `package.devc.xml` —
   deployed dev apps (`remove_app` deletes them again).
 - `<abap2UI5>/e2e-transpile.json` — temporary incremental-build config
   (deleted on close).
@@ -87,7 +87,7 @@ deployApp validation error paths, the BENIGN console filter);
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
 `test/smoke.test.mjs` boots the real server over stdio (initialize, 9 tools,
-a capabilities query) and **skips itself when the ai-demokit sibling is
+a capabilities query) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
 on every push/PR. Manual stdio driving, when a test is not enough:
@@ -141,7 +141,7 @@ legitimately slower.
 
 | Repository | Relation |
 | --- | --- |
-| [ai-demokit](https://github.com/abap2UI5/ai-demokit) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime |
+| [samples-controls](https://github.com/abap2UI5/samples-controls) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime |
 | [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server |
 | [abap2UI5-linter](https://github.com/abap2UI5/linter) | `validate_view` implementation (imported via its package `exports` map) |
 | [vscode-extension](https://github.com/abap2UI5/vscode-extension) | Registers this server for MCP clients in the editor (`src/mcp.ts`) |

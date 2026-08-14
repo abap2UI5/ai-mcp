@@ -1,5 +1,5 @@
 // stdio smoke: boots the real server and drives the MCP handshake. Needs the
-// ai-demokit sibling checkout (the server reads its content live) - the test
+// samples-controls sibling checkout (the server reads its content live) - the test
 // SKIPS cleanly when it is absent, so `npm test` stays green in a bare CI
 // checkout while still exercising the full path in a sibling workspace.
 import test from 'node:test';
@@ -8,11 +8,11 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAiDemokit, resolveViewCheck } from '../lib/repos.mjs';
+import { resolveSamplesControls, resolveViewCheck } from '../lib/repos.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-const HAVE_DEMOKIT = !!resolveAiDemokit();
+const HAVE_CORPUS = !!resolveSamplesControls();
 const HAVE_LINTER = !!resolveViewCheck();
 
 // the complete tool surface — a new/renamed/dropped tool must show up here
@@ -22,13 +22,14 @@ export const TOOL_NAMES = [
   'capabilities',
   'deploy_app',
   'generation_rules',
+  'pitfalls',
   'remove_app',
   'run_app',
   'scope_of',
   'validate_view',
 ];
 
-test('stdio smoke: initialize, 9 tools, a capabilities query', { skip: !HAVE_DEMOKIT && 'ai-demokit sibling not found' }, async () => {
+test('stdio smoke: initialize, 10 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));

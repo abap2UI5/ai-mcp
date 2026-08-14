@@ -10,6 +10,7 @@
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
  *   generation_rules  the porting/building rulebook (generation-prompt.txt)
+ *   pitfalls          the abap-check / ui5-check catalogues (defects a green CI misses)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
  *   validate_view     static gates via abap2UI5-linter (properties + render)
  *   deploy_app        write an app class into src/zz_dev/ (+ optional lint)
@@ -28,7 +29,8 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
-import { resolveAiDemokit, resolveA2UI5, resolveViewCheck, importViewCheck, SERVER_ROOT } from './lib/repos.mjs';
+import { searchPitfalls } from './lib/pitfalls.mjs';
+import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, importViewCheck, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
   removeApp,
@@ -70,6 +72,31 @@ const TOOLS = [
       '(dispatcher skeleton, view/attribute idioms, binding and event rules). Read it once before ' +
       'generating ABAP.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'pitfalls',
+    description:
+      'The catalogues of defects a green CI does NOT catch, read live from the abap2UI5 checkout: '
+      + '`abap` covers ABAP that has to survive a real SAP system (abapGit round trip and import, '
+      + 'activation, extended check, downport/transpiler, runtime), `view` covers the view side '
+      + '(names the 1.71 floor does not have, layout that only works on a newer release, views that '
+      + 'fail to load rather than to render, CSP). Every entry is a defect that actually shipped. '
+      + 'Read it before finishing a change — validate_view catches what a rule can decide, this is '
+      + 'the rest.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        area: {
+          type: 'string',
+          enum: ['abap', 'view', 'all'],
+          description: 'which catalogue (default: all)',
+        },
+        query: {
+          type: 'string',
+          description: 'optional keywords — returns only the matching sections, e.g. "icon" or "abapgit sidecar"',
+        },
+      },
+    },
   },
   {
     name: 'scope_of',
@@ -199,13 +226,13 @@ function toolError(message) {
  * path.join(null, ...)): which repo is absent, how to clone it, which env var
  * points at an existing checkout. The server itself always starts. */
 const SIBLING_REPOS = {
-  'ai-demokit': {
-    resolve: resolveAiDemokit,
-    hint: 'clone https://github.com/abap2UI5/ai-demokit as a sibling of ai-mcp, or point AI_DEMOKIT_HOME at an existing checkout',
+  'samples-controls': {
+    resolve: resolveSamplesControls,
+    hint: 'clone https://github.com/abap2UI5/samples-controls as a sibling of ai-mcp, or point SAMPLES_CONTROLS_HOME at an existing checkout (AI_DEMOKIT_HOME, its former name, is still read)',
   },
   abap2UI5: {
     resolve: resolveA2UI5,
-    hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of ai-mcp (or run `npm run node:setup` in ai-demokit), or point A2UI5_HOME at an existing checkout',
+    hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of ai-mcp (or run `npm run node:setup` in samples-controls), or point A2UI5_HOME at an existing checkout',
   },
   linter: {
     resolve: resolveViewCheck,
@@ -248,7 +275,7 @@ function progressReporter({ progressToken, sendNotification }) {
 async function handle(name, args = {}, ctx = {}) {
   switch (name) {
     case 'capabilities': {
-      const miss = missingSibling('ai-demokit');
+      const miss = missingSibling('samples-controls');
       if (miss) return miss;
       if (!args.query && !args.status) {
         const s = capabilitySummary();
@@ -261,9 +288,9 @@ async function handle(name, args = {}, ctx = {}) {
       return text({ matches: hits.length, entries: hits });
     }
     case 'generation_rules': {
-      const miss = missingSibling('ai-demokit');
+      const miss = missingSibling('samples-controls');
       if (miss) return miss;
-      const p = path.join(resolveAiDemokit(), 'scripts', 'generation-prompt.txt');
+      const p = path.join(resolveSamplesControls(), 'scripts', 'generation-prompt.txt');
       const rules = fs.readFileSync(p, 'utf8');
       return text(
         rules +
@@ -271,8 +298,31 @@ async function handle(name, args = {}, ctx = {}) {
           'and https://abap2ui5.github.io/docs/advanced/agent.html for apps built on z2ui5_cl_xml_view.',
       );
     }
+    case 'pitfalls': {
+      // the catalogues live in the abap2UI5 checkout, not in the corpus
+      const miss = missingSibling('abap2UI5');
+      if (miss) return miss;
+      const area = args.area || 'all';
+      if (!['abap', 'view', 'all'].includes(area)) {
+        return toolError(`unknown area '${area}' — use abap, view or all`);
+      }
+      const found = searchPitfalls({ area, query: args.query });
+      if (!found) {
+        return toolError('the abap2UI5 checkout has no .claude/skills/{abap-check,ui5-check}/SKILL.md — '
+          + 'update it (git pull); the catalogues live there');
+      }
+      const total = found.reduce((n, c) => n + c.sections.length, 0);
+      if (args.query && !total) {
+        return text({
+          matches: 0,
+          hint: `nothing in the ${area} catalogue matches "${args.query}" — `
+            + 'call it without a query to read the whole thing (it is meant to be read once per task)',
+        });
+      }
+      return text({ matches: total, catalogues: found });
+    }
     case 'scope_of': {
-      const miss = missingSibling('ai-demokit');
+      const miss = missingSibling('samples-controls');
       if (miss) return miss;
       const entities = args.entities || [];
       if (!entities.length) return toolError('pass at least one entity, e.g. ["sap.m.Wizard"]');
@@ -280,7 +330,7 @@ async function handle(name, args = {}, ctx = {}) {
       return text(`${out}\n\n(exit ${code}: 0 = all in scope, 1 = at least one out of scope or unresolved)`);
     }
     case 'deploy_app': {
-      const miss = missingSibling('ai-demokit');
+      const miss = missingSibling('samples-controls');
       if (miss) return miss;
       const res = deployApp({
         className: args.class_name,
@@ -319,8 +369,8 @@ async function handle(name, args = {}, ctx = {}) {
       if (args.min_ui5) { opt.minUi5 = args.min_ui5; seen.add('minUi5'); }
       if (args.allow) opt.allow = args.allow;
       if (args.render === false) { opt.render = false; seen.add('render'); }
-      const demokit = resolveAiDemokit();
-      const configFile = demokit ? findConfigFrom(demokit) : null;
+      const corpus = resolveSamplesControls();
+      const configFile = corpus ? findConfigFrom(corpus) : null;
       if (configFile) {
         const cfg = loadConfig(configFile);
         delete cfg.baseline; // baseline is a repo-workflow concern; new source has no baseline entry
@@ -366,10 +416,10 @@ async function handle(name, args = {}, ctx = {}) {
       });
     }
     case 'build_backend': {
-      // the build pipeline lives in ai-demokit; the abap2UI5 checkout is
+      // the build pipeline lives in samples-controls; the abap2UI5 checkout is
       // resolved (and clearly reported) by the build itself, which can also
       // bootstrap the in-repo .abap2UI5 clone on a full build
-      const miss = missingSibling('ai-demokit');
+      const miss = missingSibling('samples-controls');
       if (miss) return miss;
       await stopBackend();
       const res = await buildBackend({ mode: args.mode || 'auto', onLine: progressReporter(ctx) });
@@ -377,8 +427,8 @@ async function handle(name, args = {}, ctx = {}) {
       return text({ built: true, mode: res.mode, next: 'run_app { class_name } to boot and screenshot the app', tail: res.tail.split('\n').slice(-5).join('\n') });
     }
     case 'run_app': {
-      // ai-demokit serves the local @openui5 modules, abap2UI5 the backend
-      const miss = missingSibling('ai-demokit', 'abap2UI5');
+      // samples-controls serves the local @openui5 modules, abap2UI5 the backend
+      const miss = missingSibling('samples-controls', 'abap2UI5');
       if (miss) return miss;
       const res = await runApp({ className: args.class_name, timeoutMs: args.timeout_ms || 60000 });
       const report = {
@@ -408,7 +458,7 @@ async function handle(name, args = {}, ctx = {}) {
       return text(backendStatus());
     }
     case 'remove_app': {
-      const miss = missingSibling('ai-demokit');
+      const miss = missingSibling('samples-controls');
       if (miss) return miss;
       if (!args.class_name) return text({ devApps: listDevApps() });
       const removed = removeApp(args.class_name);
@@ -450,4 +500,4 @@ process.on('SIGTERM', async () => {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error(`abap2ui5 MCP server ready (ai-demokit: ${resolveAiDemokit()}, backend built: ${backendBuilt()})`);
+console.error(`abap2ui5 MCP server ready (samples-controls: ${resolveSamplesControls()}, backend built: ${backendBuilt()})`);
