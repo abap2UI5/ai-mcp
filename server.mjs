@@ -179,12 +179,12 @@ const TOOLS = [
     description:
       'Boot an app class headless in Chromium against the local backend (?app_start=<class>) and LOOK at it: ' +
       'returns booted/ok, real page errors + failed backend calls (benign UI5 noise filtered), and a full-page ' +
-      'screenshot as an image. The visual verification step of the loop — also works for the 276 existing ports ' +
-      'and z2ui5_cl_ai_app_overview.',
+      'screenshot as an image. The visual verification step of the loop — also works for the existing ports ' +
+      'and z2ui5_cl_smpc_app_overview.',
     inputSchema: {
       type: 'object',
       properties: {
-        class_name: { type: 'string', description: 'the app class to start, e.g. z2ui5_cl_my_app or z2ui5_cl_ai_app_005' },
+        class_name: { type: 'string', description: 'the app class to start, e.g. z2ui5_cl_my_app or z2ui5_cl_smpc_app_005' },
         timeout_ms: { type: 'number', description: 'boot timeout in ms (default 60000)' },
       },
       required: ['class_name'],
