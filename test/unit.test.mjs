@@ -16,6 +16,16 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // ------------------------------------------------------------ stripJsonc ----
+test('stripJsonc counts characters the way it measured them', () => {
+  // the offsets of the trailing commas come from out.length (UTF-16 code
+  // units); dropping them by code POINT shifts every index after the first
+  // astral character, so an emoji anywhere before a trailing comma used to
+  // delete the wrong one and leave unparseable JSON behind
+  const jsonc = '{ "a": "\u{1F389}", "b": [1,2,], }';
+  const out = stripJsonc(jsonc);
+  assert.deepEqual(JSON.parse(out), { a: '\u{1F389}', b: [1, 2] });
+});
+
 
 test('stripJsonc removes line and block comments but keeps strings intact', () => {
   const jsonc = `{

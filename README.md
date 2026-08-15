@@ -21,27 +21,86 @@ validation core.
 
 ## Setup
 
-The server orchestrates sibling checkouts (override locations with env vars):
+The tools need different things, so you can stop at the level you need. Each
+step adds the ones below it.
+
+### Level 1 — validate views (~3 MB, a minute)
+
+`validate_view` alone, which is the tool you reach for most: it reconstructs
+the view your ABAP builds and checks it against the UI5 API.
+
+```sh
+git clone https://github.com/abap2UI5/linter   # AI_VIEW_CHECK_HOME
+git clone https://github.com/abap2UI5/ai-mcp
+cd linter && npm ci && cd ../ai-mcp && npm ci
+```
+
+The other tools answer with an actionable message naming what is missing
+rather than failing — the server starts either way.
+
+### Level 2 — the catalogues and deploying (~110 MB)
+
+`capabilities`, `generation_rules`, `pitfalls`, `scope_of`, `deploy_app`.
 
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5          # A2UI5_HOME
 git clone https://github.com/abap2UI5/samples-controls  # SAMPLES_CONTROLS_HOME
-git clone https://github.com/abap2UI5/linter            # AI_VIEW_CHECK_HOME (required for validate_view)
-git clone https://github.com/abap2UI5/ai-mcp
-cd abap2UI5 && npm ci && cd ../samples-controls && npm ci && cd ../linter && npm ci && cd ../ai-mcp && npm ci
+cd abap2UI5 && npm ci && cd ../samples-controls && npm ci
+```
+
+### Level 3 — see the app (a browser, and time)
+
+`build_backend` + `run_app`: the screenshot loop.
+
+```sh
 npx playwright install chromium
 ```
+
+Then one `build_backend { mode: "full" }`, which transpiles the framework and
+the corpus to Node. **Budget tens of minutes for that first build** — every
+later one is incremental (~1–2 min). It is the slowest thing here by far, and
+it is what buys an agent the ability to look at what it built.
 
 > **If you set this up earlier:** the corpus repository was `ai-demokit`, then
 > `abap2UI5-api`, and is `samples-controls` today. Nothing needs changing — an
 > existing checkout is still found under any of the three directory names, and
 > `AI_DEMOKIT_HOME` is still read alongside `SAMPLES_CONTROLS_HOME`.
 
-Register in your MCP client, e.g. Claude Code:
+### Register it with your client
+
+**Claude Code:**
 
 ```sh
 claude mcp add abap2ui5 -- node /path/to/ai-mcp/server.mjs
 ```
+
+**Cursor** (`.cursor/mcp.json`), **VS Code** (`.vscode/mcp.json`), **Claude
+Desktop** (`claude_desktop_config.json`) and anything else that reads the
+standard stdio shape:
+
+```json
+{
+  "mcpServers": {
+    "abap2ui5": {
+      "command": "node",
+      "args": ["/path/to/ai-mcp/server.mjs"],
+      "env": {
+        "AI_VIEW_CHECK_HOME": "/path/to/linter",
+        "A2UI5_HOME": "/path/to/abap2UI5",
+        "SAMPLES_CONTROLS_HOME": "/path/to/samples-controls"
+      }
+    }
+  }
+}
+```
+
+The three `env` entries are only needed if the checkouts are not siblings of
+`ai-mcp`; drop the ones you stopped short of. VS Code wants the same object
+under a top-level `"servers"` key rather than `"mcpServers"`.
+
+The [abap2UI5 VS Code extension](https://github.com/abap2UI5/vscode-extension)
+registers this server for you, and adds a second one of its own for the tools
+that need a real SAP system.
 
 ## Tools
 

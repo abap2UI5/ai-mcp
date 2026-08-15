@@ -298,6 +298,14 @@ async function handle(name, args = {}, ctx = {}) {
       const miss = missingSibling('samples-controls');
       if (miss) return miss;
       const p = path.join(resolveSamplesControls(), 'scripts', 'generation-prompt.txt');
+      // the checkout can be there and the file not: an older revision, a
+      // half-finished pull, a rename upstream. Say which file and what to do,
+      // the way `pitfalls` does - a raw ENOENT reaches the agent as a stack
+      // trace it cannot act on.
+      if (!fs.existsSync(p)) {
+        return toolError(`the samples-controls checkout has no scripts/generation-prompt.txt (looked in ${p}) — `
+          + 'update it (git pull); the rulebook lives there');
+      }
       const rules = fs.readFileSync(p, 'utf8');
       return text(
         rules +
