@@ -92,6 +92,40 @@ test('searchCapabilities filters by status and by AND-ed query terms', () => {
   assert.equal(searchCapabilities({ query: 'nonexistent thing', rawText: CAPS_FIXTURE }).length, 0);
 });
 
+/* Both documents are parsed LIVE on every query - that is the whole design
+ * (no generated artifact that can drift), and it means the server re-reads
+ * whatever the checkout happens to contain right now: mid-edit, mid-merge,
+ * half-pulled. A throw there is not a wrong answer, it is a dead tool, so
+ * neither parser may throw on anything.
+ *
+ * Measured before pinning: 1,144 calls over the real CAPABILITIES.md and the
+ * abap-check catalogue - 60 truncations each, 400 seeded mutations
+ * (pipes, backticks, headings, rule lines inserted / runs deleted /
+ * duplicated) and degenerate inputs - threw nothing. Those need the sibling
+ * checkouts; this fixture-scale guard is what runs sibling-free. */
+test('the live parsers report, never throw, on a damaged document', () => {
+  const POISON = ['|', '\\|', '\n', '`', '#', '##', '---', '|---|', '', ' ', '\\', '"'];
+  for (let i = 0; i <= 40; i++) {
+    const capCut = CAPS_FIXTURE.slice(0, Math.floor((CAPS_FIXTURE.length * i) / 40));
+    const catCut = CATALOGUE.slice(0, Math.floor((CATALOGUE.length * i) / 40));
+    assert.doesNotThrow(() => parseCapabilities(capCut), `parseCapabilities threw on a ${i}/40 truncation`);
+    assert.doesNotThrow(() => searchCapabilities({ query: 'a b', status: 'direct', rawText: capCut }),
+      `searchCapabilities threw on a ${i}/40 truncation`);
+    assert.doesNotThrow(() => sliceCatalogue(catCut, 'icon'), `sliceCatalogue threw on a ${i}/40 truncation`);
+  }
+  POISON.forEach((p, i) => {
+    const at = Math.floor((CAPS_FIXTURE.length * (i + 1)) / (POISON.length + 1));
+    assert.doesNotThrow(() => parseCapabilities(CAPS_FIXTURE.slice(0, at) + p + CAPS_FIXTURE.slice(at)),
+      `parseCapabilities threw on ${JSON.stringify(p)} at ${at}`);
+    assert.doesNotThrow(() => sliceCatalogue(CATALOGUE.slice(0, at) + p + CATALOGUE.slice(at)),
+      `sliceCatalogue threw on ${JSON.stringify(p)} at ${at}`);
+  });
+  for (const bad of ['', '\n', '|', '|||', '# x', '## ', '---\n---\n', '|a|b|c|d|']) {
+    assert.doesNotThrow(() => parseCapabilities(bad), `parseCapabilities threw on ${JSON.stringify(bad)}`);
+    assert.doesNotThrow(() => sliceCatalogue(bad), `sliceCatalogue threw on ${JSON.stringify(bad)}`);
+  }
+});
+
 // ------------------------------------------------- deployApp validation ----
 // The validation gate runs BEFORE any sibling checkout is touched, so the
 // error paths are sibling-free. (The happy path writes into ai-demokit and
