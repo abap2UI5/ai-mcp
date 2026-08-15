@@ -295,7 +295,7 @@ async function handle(name, args = {}, ctx = {}) {
       return text(
         rules +
           '\n\n---\nMore depth: AGENTS.md (conventions, gates), CAPABILITIES.md via the capabilities tool, ' +
-          'and https://abap2ui5.github.io/docs/advanced/agent.html for apps built on z2ui5_cl_xml_view.',
+          'and https://abap2ui5.github.io/docs/cookbook/overview for the cookbook.',
       );
     }
     case 'pitfalls': {
