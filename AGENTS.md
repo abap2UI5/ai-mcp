@@ -33,7 +33,7 @@ A missing checkout degrades **per tool** (the server still starts;
 error — which repo, how to clone it, which env var; see `missingSibling` in
 `server.mjs`) — `validate_view` needs the linter, `run_app`/`backend` need
 the core repo, almost everything else needs samples-controls. The README calls the
-linter "optional"; that is true for 8 of 9 tools and fatal for
+linter "optional"; that is true for 9 of 10 tools and fatal for
 `validate_view`. `test/missing-siblings.test.mjs` pins this contract per
 tool by pointing all three env vars at nonexistent directories.
 
@@ -86,7 +86,7 @@ deployApp validation error paths, the BENIGN console filter);
 `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 9 tools,
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 10 tools,
 a capabilities query) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
@@ -104,7 +104,7 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 9 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 10 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
 table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`
