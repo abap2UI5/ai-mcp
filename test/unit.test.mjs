@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripJsonc, BENIGN, deployApp, removeApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
-import { CORPUS_DIRS } from '../lib/repos.mjs';
+import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -278,4 +278,50 @@ test('pitfalls: a query narrows to whole sections that carry every term', () => 
   assert.equal(sliceCatalogue(CATALOGUE, 'toolbar bar').length, 1, 'both terms must match, in any order');
   assert.equal(sliceCatalogue(CATALOGUE, 'icon toolbar').length, 0,
     'terms from two different sections match neither');
+});
+
+// ----------------------------------------------------- resolveLintConfig ----
+
+/* A stand-in for the linter's findConfigFrom: answers for the directories the
+ * fake tree has a config in, null everywhere else. */
+const finder = (...withConfig) => (dir) => (withConfig.includes(dir) ? `${dir}/abap2ui5lint.jsonc` : null);
+
+test('a named project decides which config validate_view uses', () => {
+  const find = finder('/home/me/app', '/cwd', '/corpus');
+  assert.equal(
+    resolveLintConfig(find, { projectDir: '/home/me/app', cwd: '/cwd', corpus: '/corpus' }),
+    '/home/me/app/abap2ui5lint.jsonc',
+  );
+});
+
+test('a named project without a config gets defaults, not the corpus config', () => {
+  // the regression this argument exists for: an app in someone else's
+  // repository was judged by samples-controls' rules with no way to say no
+  const find = finder('/corpus', '/cwd');
+  assert.equal(
+    resolveLintConfig(find, { projectDir: '/home/me/app', cwd: '/cwd', corpus: '/corpus' }),
+    null,
+    'the caller pointed somewhere - a config from elsewhere is not an answer',
+  );
+});
+
+test('unnamed falls back to the working directory before the corpus', () => {
+  const find = finder('/cwd', '/corpus');
+  assert.equal(
+    resolveLintConfig(find, { cwd: '/cwd', corpus: '/corpus' }),
+    '/cwd/abap2ui5lint.jsonc',
+  );
+});
+
+test('the corpus config still applies when nothing else has one', () => {
+  // porting inside samples-controls keeps working exactly as before
+  const find = finder('/corpus');
+  assert.equal(
+    resolveLintConfig(find, { cwd: '/somewhere/else', corpus: '/corpus' }),
+    '/corpus/abap2ui5lint.jsonc',
+  );
+});
+
+test('no config anywhere is null, not a throw', () => {
+  assert.equal(resolveLintConfig(finder(), { cwd: '/x' }), null);
 });

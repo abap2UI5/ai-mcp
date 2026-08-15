@@ -30,7 +30,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
 import { searchPitfalls } from './lib/pitfalls.mjs';
-import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, importViewCheck, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
   removeApp,
@@ -149,6 +149,13 @@ const TOOLS = [
       properties: {
         abap_source: { type: 'string', description: 'ABAP class source building its view with z2ui5_cl_ui5_view_builder' },
         xml: { type: 'string', description: 'alternatively: raw view/fragment XML' },
+        project_dir: {
+          type: 'string',
+          description:
+            'the project this source belongs to — its abap2ui5lint.jsonc (searched upwards from here) supplies '
+            + 'the rule overrides, allow list and UI5 floor, so a finding matches what that project\'s own CI says. '
+            + 'Defaults to the working directory, then to the samples-controls corpus.',
+        },
         min_ui5: { type: 'string', description: 'UI5 floor for the property gate (default 1.71)' },
         allow: { type: 'array', items: { type: 'string' }, description: 'accepted deviations, e.g. ["sap.m.GenericTile.systemInfo"]' },
         render: { type: 'boolean', description: 'run the headless render gate (default true)' },
@@ -369,8 +376,18 @@ async function handle(name, args = {}, ctx = {}) {
       if (args.min_ui5) { opt.minUi5 = args.min_ui5; seen.add('minUi5'); }
       if (args.allow) opt.allow = args.allow;
       if (args.render === false) { opt.render = false; seen.add('render'); }
-      const corpus = resolveSamplesControls();
-      const configFile = corpus ? findConfigFrom(corpus) : null;
+      /* Which project's config that is, in order: the one named, the one the
+       * server was started in, the corpus. It used to be the corpus and only
+       * the corpus, which is right for porting samples and wrong for everyone
+       * else: an app in someone's own repository was judged by samples-
+       * controls' rule overrides, allow list and UI5 floor, with no argument
+       * to say otherwise — while this tool's description promised the
+       * opposite. The chosen file is reported back as `config`. */
+      const configFile = resolveLintConfig(findConfigFrom, {
+        projectDir: args.project_dir,
+        cwd: process.cwd(),
+        corpus: resolveSamplesControls(),
+      });
       if (configFile) {
         const cfg = loadConfig(configFile);
         delete cfg.baseline; // baseline is a repo-workflow concern; new source has no baseline entry
