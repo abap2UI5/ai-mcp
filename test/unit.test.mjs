@@ -38,6 +38,15 @@ test('stripJsonc tolerates trailing commas', () => {
   assert.equal(parsed.b.c, 1);
 });
 
+/* Trailing-comma removal must tell punctuation from text. It used to be a
+ * regex over the finished output, which also rewrote string CONTENT: an
+ * abaplint exclude pattern `app[,]x` came out as `app[]x` - a character class
+ * that matches nothing, so the exclusion silently stopped excluding. */
+test('stripJsonc leaves a comma inside a string alone', () => {
+  assert.equal(JSON.parse(stripJsonc('{ "exclude": ["src/app[,]x"], }')).exclude[0], 'src/app[,]x');
+  assert.equal(JSON.parse(stripJsonc('{ "a": "foo, } bar" }')).a, 'foo, } bar');
+});
+
 // -------------------------------------------------- CAPABILITIES.md parser ----
 
 // marks built from code points so this source stays 7-bit ASCII (repo rule)
