@@ -23,6 +23,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     env: {
       ...process.env,
       SAMPLES_CONTROLS_HOME: path.join(NOWHERE, 'samples-controls'),
+      SAMPLES_HOME: path.join(NOWHERE, 'samples'),
       A2UI5_HOME: path.join(NOWHERE, 'abap2UI5'),
       AI_VIEW_CHECK_HOME: path.join(NOWHERE, 'linter'),
     },
@@ -82,7 +83,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     const list = await until((m) => m.id === 2);
     assert.deepEqual(
       list.result.tools.map((t) => t.name).sort(),
-      ['backend', 'build_backend', 'capabilities', 'deploy_app', 'generation_rules', 'pitfalls', 'remove_app', 'run_app', 'scope_of', 'validate_view'],
+      ['backend', 'build_backend', 'capabilities', 'deploy_app', 'examples', 'generation_rules', 'pitfalls', 'remove_app', 'run_app', 'scope_of', 'validate_view'],
     );
 
     // samples-controls-backed tools
@@ -99,6 +100,13 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     expectMissing(await call('build_backend', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('remove_app', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('remove_app', { class_name: 'z2ui5_cl_demo' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
+
+    // the sample catalogue - a different repository from the corpus, and the
+    // error has to say which one is missing rather than sending the reader to
+    // samples-controls for a sample-catalogue query
+    const SAMPLES = /samples checkout not found/;
+    expectMissing(await call('examples', {}), SAMPLES, 'SAMPLES_HOME');
+    expectMissing(await call('examples', { query: 'value help' }), SAMPLES, 'SAMPLES_HOME');
 
     // linter-backed tool
     expectMissing(

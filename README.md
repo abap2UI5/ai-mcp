@@ -5,10 +5,10 @@ Cursor, VS Code Copilot, or any MCP client) the full abap2UI5 development
 loop, without an SAP system:
 
 ```
-capabilities -> validate_view -> deploy_app -> build_backend -> run_app -> pitfalls
- (what can        (static gates:     (write ABAP,    (transpile       (boot headless,    (what a green
-  I express?)      props + render)    lint)           to Node)         errors +           run still
-                                                                       SCREENSHOT)        does not prove)
+examples -> capabilities -> validate_view -> deploy_app -> build_backend -> run_app -> pitfalls
+(has somebody   (what can        (static gates:     (write ABAP,    (transpile       (boot headless,    (what a green
+ built it       I express?)       props + render)    lint)           to Node)         errors +           run still
+ already?)                                                                            SCREENSHOT)        does not prove)
 ```
 
 The agent writes an ABAP class, validates the view in seconds, deploys it,
@@ -40,13 +40,21 @@ rather than failing — the server starts either way.
 
 ### Level 2 — the catalogues and deploying (~110 MB)
 
-`capabilities`, `generation_rules`, `pitfalls`, `scope_of`, `deploy_app`.
+`examples`, `capabilities`, `generation_rules`, `pitfalls`, `scope_of`, `deploy_app`.
 
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5          # A2UI5_HOME
 git clone https://github.com/abap2UI5/samples-controls  # SAMPLES_CONTROLS_HOME
+git clone https://github.com/abap2UI5/samples           # SAMPLES_HOME
 cd abap2UI5 && npm ci && cd ../samples-controls && npm ci
 ```
+
+`examples` needs only the `samples` clone — no install — and it is the cheapest
+useful thing here: it answers *"has somebody already built a value help / a
+tree / navigation between two apps"* out of 152 working apps, and hands back a
+class to read rather than a snippet to trust. The neighbouring question,
+*"can abap2UI5 express this UI5 control at all"*, is `capabilities`, out of
+samples-controls' 416 ports of the demo kit. Neither answers the other.
 
 ### Level 3 — see the app (a browser, and time)
 
