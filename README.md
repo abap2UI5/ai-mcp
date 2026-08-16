@@ -46,15 +46,25 @@ rather than failing — the server starts either way.
 git clone https://github.com/abap2UI5/abap2UI5          # A2UI5_HOME
 git clone https://github.com/abap2UI5/samples-controls  # SAMPLES_CONTROLS_HOME
 git clone https://github.com/abap2UI5/samples           # SAMPLES_HOME
+git clone https://github.com/abap2UI5/samples-stack     # SAMPLES_STACK_HOME
 cd abap2UI5 && npm ci && cd ../samples-controls && npm ci
 ```
 
-`examples` needs only the `samples` clone — no install — and it is the cheapest
-useful thing here: it answers *"has somebody already built a value help / a
-tree / navigation between two apps"* out of 152 working apps, and hands back a
-class to read rather than a snippet to trust. The neighbouring question,
-*"can abap2UI5 express this UI5 control at all"*, is `capabilities`, out of
-samples-controls' 416 ports of the demo kit. Neither answers the other.
+`examples` needs only the clones — no install — and it is the cheapest useful
+thing here: it answers *"has somebody already built a value help / a tree /
+navigation between two apps"* out of **614 working apps in three repositories**,
+and hands back a class to read rather than a snippet to trust.
+
+| repository | what it answers |
+|---|---|
+| `samples` (152) | the patterns, on a bare abap2UI5 install |
+| `samples-controls` (431) | how a specific UI5 **control** is expressed — the demo kit, rebuilt |
+| `samples-stack` (32) | the same, for apps that need OData, RAP, APC or the launchpad |
+
+Any one of the three is enough to start: a missing clone is reported in the
+answer, not fatal. The neighbouring question, *"can abap2UI5 express this UI5
+control **at all**"*, is `capabilities`, out of samples-controls'
+`CAPABILITIES.md`. Neither answers the other.
 
 ### Level 3 — see the app (a browser, and time)
 

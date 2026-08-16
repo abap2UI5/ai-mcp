@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripJsonc, BENIGN, deployApp, removeApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
-import { parseExamples, searchExamples } from '../lib/examples.mjs';
+import { parseExamples, searchExamples, CATALOGUES } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import fs from 'node:fs';
@@ -392,6 +392,49 @@ test('a row keeps parsing when the catalogue adds another block of small type', 
   assert.equal(f4.keywords, 'f4 search help suggestion input');
   assert.equal(searchExamples({ query: 'f4', rawText: SAMPLES_MD }).length, 1);
   assert.equal(searchExamples({ query: 'cookbook', rawText: SAMPLES_MD }).length, 0);
+});
+
+/* The catalogues grew a SECOND kind of block under the title - the summary
+ * sentence, in normal type rather than in <sub> - and the parser has to keep
+ * the two apart. Mistaking the sentence for the search terms would rank every
+ * sample by prose it did not choose to be found by; mistaking the terms for
+ * the sentence would put "f4 search help suggestion input" where a human reads
+ * a description. */
+const SAMPLES_MD_WITH_SUMMARY = [
+  '## Popup',
+  '',
+  '| Sample | Class |',
+  '|---|---|',
+  '| Value Help: Suggestions and F4 Dialog<br>The value help, both halves: suggestions while typing and the F4 dialog behind the field.<br><sub>f4 search help suggestion input</sub><br><sub>docs: [cookbook/expert_more/value_help](https://abap2ui5.github.io/docs/cookbook/expert_more/value_help)</sub> | [`Z2UI5_CL_SMP_APP_009`](src/01/z2ui5_cl_smp_app_009.clas.abap) |',
+].join('\n');
+
+test('the summary sentence and the search terms are told apart', () => {
+  const [e] = parseExamples(SAMPLES_MD_WITH_SUMMARY);
+  assert.equal(e.summary, 'The value help, both halves: suggestions while typing and the F4 dialog behind the field.');
+  assert.equal(e.keywords, 'f4 search help suggestion input');
+  assert.equal(e.label, 'Value Help: Suggestions and F4 Dialog');
+
+  // the sentence is searchable, and a hit in it ranks BELOW a keyword hit
+  assert.equal(searchExamples({ query: 'typing', rawText: SAMPLES_MD_WITH_SUMMARY }).length, 1);
+  // the docs block is still not a search term
+  assert.equal(searchExamples({ query: 'cookbook', rawText: SAMPLES_MD_WITH_SUMMARY }).length, 0);
+});
+
+/* A row that has NO summary yet must keep parsing: the three repositories add
+ * the line at their own pace, and a parser that required it would answer
+ * "nothing found" for a whole catalogue rather than fail loudly. */
+test('a row without a summary still parses', () => {
+  const e = parseExamples(SAMPLES_MD).find((x) => x.cls === 'Z2UI5_CL_SMP_APP_009');
+  assert.equal(e.summary, '');
+  assert.equal(e.keywords, 'f4 search help suggestion input');
+});
+
+test('every catalogue names its repository and its env var when it is missing', () => {
+  assert.deepEqual(CATALOGUES.map((c) => c.repo), ['samples', 'samples-controls', 'samples-stack']);
+  for (const c of CATALOGUES) {
+    assert.match(c.url, /^https:\/\/github\.com\/abap2UI5\//);
+    assert.match(c.env, /_HOME$/);
+  }
 });
 
 test('searching the catalogue narrows on every term and ranks a keyword hit first', () => {
