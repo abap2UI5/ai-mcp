@@ -429,6 +429,27 @@ test('a row without a summary still parses', () => {
   assert.equal(e.keywords, 'f4 search help suggestion input');
 });
 
+/* The row shape is maintained in three OTHER repositories, and a new kind of
+ * block has twice made every row unmatchable here. A block whose tag this
+ * parser has never seen must cost it nothing - the sample still has to be
+ * findable, because "no rows parsed" reads as "there are no samples for that"
+ * rather than as a parse error. */
+test('a row survives a block this parser has never seen', () => {
+  const md = [
+    '## Basics',
+    '',
+    '| Sample | Class |',
+    '|---|---|',
+    '| **Future** — Something<br>The sentence.<br><span>a block from a later generator</span><br><sub>terms here</sub> | [`Z2UI5_CL_SMP_APP_999`](src/01/z2ui5_cl_smp_app_999.clas.abap) |',
+  ].join('\n');
+  const [e] = parseExamples(md);
+  assert.ok(e, 'the row with an unknown block was dropped');
+  assert.equal(e.cls, 'Z2UI5_CL_SMP_APP_999');
+  // and the two blocks this parser DOES read are still told apart correctly
+  assert.equal(e.summary, 'The sentence.');
+  assert.equal(e.keywords, 'terms here');
+});
+
 test('every catalogue names its repository and its env var when it is missing', () => {
   assert.deepEqual(CATALOGUES.map((c) => c.repo), ['samples', 'samples-controls', 'samples-stack']);
   for (const c of CATALOGUES) {
