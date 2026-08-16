@@ -9,6 +9,7 @@
  *
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
+ *   examples          which app already does this (SAMPLES.md, live-parsed)
  *   generation_rules  the porting/building rulebook (generation-prompt.txt)
  *   pitfalls          the abap-check / ui5-check catalogues (defects a green CI misses)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
@@ -19,7 +20,7 @@
  *   remove_app        delete a dev app from src/zz_dev/ again
  *   backend           start/stop/status of the express backend
  *
- * The intended agent loop: capabilities -> deploy_app -> build_backend ->
+ * The intended agent loop: examples/capabilities -> deploy_app -> build_backend ->
  * run_app -> read the errors, LOOK at the screenshot -> edit -> repeat.
  */
 import path from 'path';
@@ -29,8 +30,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
+import { searchExamples, exampleSummary } from './lib/examples.mjs';
 import { searchPitfalls } from './lib/pitfalls.mjs';
-import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
   removeApp,
@@ -62,6 +64,36 @@ const TOOLS = [
           enum: ['direct', 'workaround', 'needs-live-test', 'not-expressible'],
           description: 'optional filter on the capability status',
         },
+      },
+    },
+  },
+  {
+    name: 'examples',
+    description:
+      'Find a WORKING APP that already does what you are about to build, from the abap2UI5/samples '
+      + 'catalogue (152 apps, live-parsed from SAMPLES.md). This is the pattern question — "has '
+      + 'somebody built a value help / a tree / navigation between apps" — and it is a different one '
+      + 'from `capabilities`, which answers whether a UI5 CONTROL can be expressed at all. Ask this '
+      + 'before writing an app from scratch. What comes back is a class name and its path in the '
+      + 'samples repository: READ that class. It is a whole app that compiles, renders and is '
+      + 'downported to three releases, which is worth more than any snippet. Without arguments '
+      + 'returns a summary.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'keywords matched against the catalogue title, description and search terms, e.g. "value help f4" or "table binding" or "routing"',
+        },
+        area: {
+          type: 'string',
+          enum: ['samples', 'experimental-or-test'],
+          description:
+            'optional filter. `samples` is the supported set (src/01) and what you normally want; '
+            + '`experimental-or-test` is src/00 — work in progress and apps that exercise the framework '
+            + 'from the outside, useful to read, not to copy wholesale.',
+        },
+        limit: { type: 'number', description: 'maximum entries to return (default 20)' },
       },
     },
   },
@@ -241,6 +273,10 @@ const SIBLING_REPOS = {
     resolve: resolveA2UI5,
     hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of ai-mcp (or run `npm run node:setup` in samples-controls), or point A2UI5_HOME at an existing checkout',
   },
+  samples: {
+    resolve: resolveSamples,
+    hint: 'clone https://github.com/abap2UI5/samples as a sibling of ai-mcp, or point SAMPLES_HOME at an existing checkout',
+  },
   linter: {
     resolve: resolveViewCheck,
     hint: 'clone https://github.com/abap2UI5/linter as a sibling of ai-mcp, or point AI_VIEW_CHECK_HOME at an existing checkout',
@@ -293,6 +329,23 @@ async function handle(name, args = {}, ctx = {}) {
       }
       const hits = searchCapabilities({ query: args.query, status: args.status });
       return text({ matches: hits.length, entries: hits });
+    }
+    case 'examples': {
+      const miss = missingSibling('samples');
+      if (miss) return miss;
+      if (!args.query && !args.area) {
+        return text({
+          summary: exampleSummary(),
+          hint: 'pass `query` (keywords) to get matching apps; each entry names a class to READ in the samples repository',
+        });
+      }
+      const hits = searchExamples({ query: args.query, area: args.area, limit: args.limit ?? 20 });
+      return text({
+        matches: hits.length,
+        repository: 'https://github.com/abap2UI5/samples',
+        next: 'read the `path` of the closest match — it is a complete, gated app, not a fragment',
+        entries: hits,
+      });
     }
     case 'generation_rules': {
       const miss = missingSibling('samples-controls');

@@ -21,6 +21,7 @@ export const TOOL_NAMES = [
   'build_backend',
   'capabilities',
   'deploy_app',
+  'examples',
   'generation_rules',
   'pitfalls',
   'remove_app',
@@ -29,7 +30,7 @@ export const TOOL_NAMES = [
   'validate_view',
 ];
 
-test('stdio smoke: initialize, 10 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
+test('stdio smoke: initialize, 11 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));

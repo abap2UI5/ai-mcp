@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripJsonc, BENIGN, deployApp, removeApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
+import { parseExamples, searchExamples } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import fs from 'node:fs';
@@ -334,4 +335,78 @@ test('the corpus config still applies when nothing else has one', () => {
 
 test('no config anywhere is null, not a throw', () => {
   assert.equal(resolveLintConfig(finder(), { cwd: '/x' }), null);
+});
+
+/* The sample catalogue as a query surface. Parsed from a literal here rather
+ * than from the checkout, so the shape SAMPLES.md promises is asserted even
+ * where the sibling repository is not present. */
+const SAMPLES_MD = [
+  '# The sample catalogue',
+  '',
+  '## Basics',
+  '',
+  '| Sample | Class |',
+  '|---|---|',
+  '| **Basics I** — Hello World, the Smallest App<br><sub>hello world minimal start here</sub> | [`Z2UI5_CL_SMP_APP_493`](src/01/z2ui5_cl_smp_app_493.clas.abap) |',
+  '',
+  '## Popup',
+  '',
+  '| Sample | Class |',
+  '|---|---|',
+  '| Value Help: Suggestions and F4 Dialog<br><sub>f4 search help suggestion input</sub><br><sub>docs: [cookbook/expert_more/value_help](https://abap2ui5.github.io/docs/cookbook/expert_more/value_help)</sub> | [`Z2UI5_CL_SMP_APP_009`](src/01/z2ui5_cl_smp_app_009.clas.abap) |',
+  '| Navigation — app state<br><sub>bookmark restore url</sub> | [`Z2UI5_CL_SMP_APP_321`](src/00/97/z2ui5_cl_smp_app_321.clas.abap) |',
+].join('\n');
+
+test('the sample catalogue parses into pointers, with and without a row header', () => {
+  const all = parseExamples(SAMPLES_MD);
+  assert.equal(all.length, 3);
+
+  const basics = all.find((e) => e.cls === 'Z2UI5_CL_SMP_APP_493');
+  assert.equal(basics.title, 'Basics I');
+  assert.equal(basics.sub, 'Hello World, the Smallest App');
+  assert.equal(basics.label, 'Basics I — Hello World, the Smallest App');
+  assert.equal(basics.path, 'src/01/z2ui5_cl_smp_app_493.clas.abap');
+  assert.equal(basics.area, 'samples');
+
+  /* generate-samples-md drops a header that would repeat its section, so this
+   * row has none. `title` then falls back to the section, which reads wrong on
+   * its own ("Popup") - the LABEL must not inherit that fallback, or every
+   * such sample would be announced by its section instead of by what it does. */
+  const f4 = all.find((e) => e.cls === 'Z2UI5_CL_SMP_APP_009');
+  assert.equal(f4.title, 'Popup');
+  assert.equal(f4.label, 'Value Help: Suggestions and F4 Dialog');
+
+  // src/00 is experimental or a test app: readable, not to be copied wholesale
+  assert.equal(all.find((e) => e.cls === 'Z2UI5_CL_SMP_APP_321').area, 'experimental-or-test');
+});
+
+/* The catalogue is generated over in abap2UI5/samples and grew a second block of
+ * small type - the `@docs` chapter links - under the keywords. A parser that
+ * expected exactly one would match no rows at all, and the failure mode is the
+ * quiet one: `examples` would answer "nothing found" for every query instead of
+ * raising anything. */
+test('a row keeps parsing when the catalogue adds another block of small type', () => {
+  const f4 = parseExamples(SAMPLES_MD).find((e) => e.cls === 'Z2UI5_CL_SMP_APP_009');
+  assert.equal(f4.label, 'Value Help: Suggestions and F4 Dialog');
+  // and the docs link is not mistaken for a search term
+  assert.equal(f4.keywords, 'f4 search help suggestion input');
+  assert.equal(searchExamples({ query: 'f4', rawText: SAMPLES_MD }).length, 1);
+  assert.equal(searchExamples({ query: 'cookbook', rawText: SAMPLES_MD }).length, 0);
+});
+
+test('searching the catalogue narrows on every term and ranks a keyword hit first', () => {
+  const q = (query, opts = {}) => searchExamples({ query, rawText: SAMPLES_MD, ...opts }).map((e) => e.cls);
+
+  assert.deepEqual(q('f4 search'), ['Z2UI5_CL_SMP_APP_009']);
+  // AND, not OR: a second term that matches nothing removes the hit
+  assert.deepEqual(q('f4 tree'), []);
+
+  /* "help" is in app 009's keywords and in nothing else; "popup" is the
+   * SECTION both share. Ranked, so the one that chose the word comes first -
+   * and the weaker match is still returned, because it may be the only one. */
+  const both = q('popup');
+  assert.equal(both.length, 2);
+
+  assert.deepEqual(q('bookmark', { area: 'samples' }), []);
+  assert.deepEqual(q('bookmark', { area: 'experimental-or-test' }), ['Z2UI5_CL_SMP_APP_321']);
 });
