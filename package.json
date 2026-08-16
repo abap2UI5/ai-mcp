@@ -1,7 +1,7 @@
 {
   "name": "@abap2ui5/mcp",
   "version": "0.1.0",
-  "description": "MCP server for abap2UI5: capability queries, view validation, deploy, headless run + screenshot \u2014 the AI agent dev loop, no SAP system needed.",
+  "description": "MCP server for abap2UI5: capability queries, view validation, deploy, headless run + screenshot — the AI agent dev loop, no SAP system needed.",
   "type": "module",
   "bin": {
     "abap2ui5-mcp": "server.mjs"
@@ -25,5 +25,23 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "files": [
+    "server.mjs",
+    "lib/",
+    "README.md",
+    "LICENSE",
+    "AGENTS.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "abap2ui5",
+    "abap",
+    "ui5",
+    "mcp",
+    "model-context-protocol",
+    "sap"
+  ]
 }

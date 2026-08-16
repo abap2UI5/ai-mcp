@@ -1,0 +1,100 @@
+name: Publish to npm
+# Publishes @abap2ui5/mcp to the public npm registry from one version tag.
+#
+# Why this exists: the server was installable only as `npx --yes
+# github:abap2UI5/ai-mcp`, which resolves to whatever main happens to hold.
+# For a server whose tool NAMES and result SHAPES are a contract with every
+# agent setup that registers it, "whatever main holds" is the wrong contract -
+# an agent's config keeps working or stops working depending on the day.
+#
+# Merging to main stays the release for everything else; npm is the one
+# channel that needs a deliberate, immutable version, because a published
+# version can never be changed.
+#
+# To cut a release:
+#   npm version patch|minor|major
+#   git push --follow-tags
+# npm version commits and tags (annotated) by itself here - there is no
+# workspace to keep in step, unlike in abap2UI5/linter.
+#
+# ---------------------------------------------------------------------------
+# One-time setup, in this order - the workflow cannot do either step itself:
+#
+#   1. The npm organisation `abap2ui5` has to own the scope. It already does:
+#      @abap2ui5/linter and @abap2ui5/render-runtime are published under it.
+#   2. Trusted publishing can only be configured for a package that already
+#      exists, so the FIRST publish is manual, from a maintainer's machine
+#      after `npm login`:
+#
+#         npm publish --access public
+#
+#      No --provenance on that one: npm generates a provenance attestation
+#      only from a supported CI and aborts elsewhere. The bootstrap version
+#      ships without it; every release this workflow cuts has it.
+#
+#      Then, on npmjs.com -> the package -> Settings -> Trusted Publisher,
+#      point it at this repository and this workflow file (`release.yml`).
+#      From the second release on, this workflow publishes with no token.
+#
+# Trusted publishing (OIDC) is deliberate: no NPM_TOKEN to leak or rotate, and
+# npm records an attestation tying the tarball to this run and commit.
+# `id-token: write` below is what mints that token.
+# ---------------------------------------------------------------------------
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # A publish is irreversible, so it is worth being able to run everything
+  # EXCEPT the publish. Dispatching this workflow does exactly that.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Node 22 ships npm 10.x, which has no OIDC support - it would fall
+      # through to asking for a token and fail confusingly. Trusted publishing
+      # needs 11.5.1 or newer.
+      - name: Use an npm that can publish via OIDC
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      # The tag is the version claim; package.json is what gets published.
+      # Catching a mismatch here costs a minute, catching it afterwards costs
+      # a burned version number - npm never lets one be reused.
+      - name: Tag and package.json must agree
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json ($PKG)" >&2
+            exit 1
+          fi
+          echo "publishing $PKG"
+
+      # The sibling-free half of the suite, on the exact commit being
+      # published rather than on whatever passed on main.
+      - run: npm test
+
+      # What the tarball will contain, in the log, before it is immutable.
+      # `files` in package.json decides this and a missing entry is invisible
+      # until someone installs the package and the server cannot find lib/.
+      - name: What is in the tarball
+        run: npm pack --dry-run
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm publish --provenance --access public
