@@ -21,6 +21,8 @@ is no silent fallback to the sibling guess.
 | --- | --- | --- |
 | `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
 | `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/` |
+| `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `SAMPLES.md` — one of the three catalogues `examples` searches |
+| `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `SAMPLES.md` — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config` (via `importViewCheck`) |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
@@ -35,13 +37,27 @@ error — which repo, how to clone it, which env var; see `missingSibling` in
 the core repo, almost everything else needs samples-controls. The README calls the
 linter "optional"; that is true for 9 of 10 tools and fatal for
 `validate_view`. `test/missing-siblings.test.mjs` pins this contract per
-tool by pointing all three env vars at nonexistent directories.
+tool by pointing every env var at a nonexistent directory.
+
+`examples` is the ONE exception and deliberately so: it reads three
+catalogues, and one of them missing is not a reason to refuse the other two.
+It answers from what it can read, names what it could not under
+`notSearched`, and only fails when all three are absent — a thinner answer to
+"has somebody built this" is worth more than a refusal.
 
 ### The compatibility surface — renames upstream break tools here silently
 
 These upstream file names/shapes are load-bearing for ai-mcp. When one
 changes upstream, this repo must change in the same breath:
 
+- samples, samples-controls, samples-stack: the `SAMPLES.md` **row shape** —
+  `| **title** — sub<br>summary<br><sub>keywords</sub> | [`CLASS`](path) |`.
+  All three generate it identically and one parser reads all three
+  (`lib/examples.mjs`), so a change to it in any of them is a change here. The
+  parser matches the `<br>` blocks as a GROUP and classifies them afterwards
+  rather than expecting a fixed sequence — twice now a new block would
+  otherwise have made every row unmatchable, and that failure reads as "there
+  are no samples for that" rather than as an error.
 - samples-controls: `CAPABILITIES.md` **table format** (4 columns, status emoji —
   parser + legend in `lib/capabilities.mjs`), `scripts/generation-prompt.txt`,
   `scripts/scope-of.mjs` CLI output, `scripts/e2e-build.mjs`, `abaplint.jsonc`,
@@ -141,7 +157,9 @@ legitimately slower.
 
 | Repository | Relation |
 | --- | --- |
-| [samples-controls](https://github.com/abap2UI5/samples-controls) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime |
+| [samples-controls](https://github.com/abap2UI5/samples-controls) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime — and one of the three `examples` catalogues |
+| [samples](https://github.com/abap2UI5/samples) | The pattern catalogue `examples` searches |
+| [samples-stack](https://github.com/abap2UI5/samples-stack) | The stack-dependent catalogue `examples` searches |
 | [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server |
 | [abap2UI5-linter](https://github.com/abap2UI5/linter) | `validate_view` implementation (imported via its package `exports` map) |
 | [vscode-extension](https://github.com/abap2UI5/vscode-extension) | Registers this server for MCP clients in the editor (`src/mcp.ts`) |

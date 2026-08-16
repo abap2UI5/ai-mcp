@@ -9,7 +9,7 @@
  *
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
- *   examples          which app already does this (SAMPLES.md, live-parsed)
+ *   examples          which app already does this (three SAMPLES.md, live-parsed)
  *   generation_rules  the porting/building rulebook (generation-prompt.txt)
  *   pitfalls          the abap-check / ui5-check catalogues (defects a green CI misses)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
@@ -30,7 +30,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
-import { searchExamples, exampleSummary } from './lib/examples.mjs';
+import { searchExamples, exampleSummary, catalogueFiles } from './lib/examples.mjs';
 import { searchPitfalls } from './lib/pitfalls.mjs';
 import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
 import {
@@ -70,14 +70,17 @@ const TOOLS = [
   {
     name: 'examples',
     description:
-      'Find a WORKING APP that already does what you are about to build, from the abap2UI5/samples '
-      + 'catalogue (152 apps, live-parsed from SAMPLES.md). This is the pattern question — "has '
-      + 'somebody built a value help / a tree / navigation between apps" — and it is a different one '
-      + 'from `capabilities`, which answers whether a UI5 CONTROL can be expressed at all. Ask this '
-      + 'before writing an app from scratch. What comes back is a class name and its path in the '
-      + 'samples repository: READ that class. It is a whole app that compiles, renders and is '
-      + 'downported to three releases, which is worth more than any snippet. Without arguments '
-      + 'returns a summary.',
+      'Find a WORKING APP that already does what you are about to build, across ALL THREE sample '
+      + 'repositories (~615 apps, live-parsed from their SAMPLES.md catalogues): abap2UI5/samples '
+      + '(patterns — value help, navigation, trees, tables), abap2UI5/samples-controls (the UI5 demo '
+      + 'kit rebuilt control by control — ask this for "how do I express sap.m.Wizard") and '
+      + 'abap2UI5/samples-stack (apps that need an OData service, RAP, APC or the launchpad — only '
+      + 'propose one when the user has that). This is the pattern question and it differs from '
+      + '`capabilities`, which answers whether a UI5 control can be expressed at all. Ask this before '
+      + 'writing an app from scratch. What comes back is a repository, a class name and its path: '
+      + 'READ that class. It is a whole app that compiles, renders and is downported to three '
+      + 'releases, which is worth more than any snippet. A repository that is not checked out is '
+      + 'reported, not fatal — the others are still searched. Without arguments returns a summary.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -85,13 +88,21 @@ const TOOLS = [
           type: 'string',
           description: 'keywords matched against the catalogue title, description and search terms, e.g. "value help f4" or "table binding" or "routing"',
         },
+        repo: {
+          type: 'string',
+          enum: ['samples', 'samples-controls', 'samples-stack'],
+          description:
+            'optional filter to one repository. Use `samples-controls` when the question is about a '
+            + 'specific UI5 CONTROL, `samples-stack` when the app may depend on the system (OData, RAP, '
+            + 'APC, launchpad), `samples` for everything else.',
+        },
         area: {
           type: 'string',
           enum: ['samples', 'experimental-or-test'],
           description:
-            'optional filter. `samples` is the supported set (src/01) and what you normally want; '
-            + '`experimental-or-test` is src/00 — work in progress and apps that exercise the framework '
-            + 'from the outside, useful to read, not to copy wholesale.',
+            'optional filter WITHIN abap2UI5/samples. `samples` is the supported set (src/01) and what '
+            + 'you normally want; `experimental-or-test` is src/00 — work in progress and apps that '
+            + 'exercise the framework from the outside, useful to read, not to copy wholesale.',
         },
         limit: { type: 'number', description: 'maximum entries to return (default 20)' },
       },
@@ -331,19 +342,34 @@ async function handle(name, args = {}, ctx = {}) {
       return text({ matches: hits.length, entries: hits });
     }
     case 'examples': {
-      const miss = missingSibling('samples');
-      if (miss) return miss;
-      if (!args.query && !args.area) {
+      /* Not `missingSibling`: one catalogue out of three being absent is not a
+       * reason to refuse the other two. What was searched and what was not is
+       * reported instead, so a thin answer is never mistaken for "nobody has
+       * built this". All three absent IS an error - there is nothing to say. */
+      const { found, missing } = catalogueFiles();
+      if (!found.length) {
+        return toolError(
+          'no sample catalogue found — clone at least one of them as a sibling of ai-mcp:\n'
+          + missing.map((m) => `  ${m.repo}: ${m.why}`).join('\n'),
+        );
+      }
+      const searched = found.map((c) => c.repo);
+      const notSearched = missing.map((m) => `${m.repo}: ${m.why}`);
+      if (!args.query && !args.area && !args.repo) {
         return text({
           summary: exampleSummary(),
-          hint: 'pass `query` (keywords) to get matching apps; each entry names a class to READ in the samples repository',
+          hint: 'pass `query` (keywords) to get matching apps; each entry names a class to READ in its repository',
         });
       }
-      const hits = searchExamples({ query: args.query, area: args.area, limit: args.limit ?? 20 });
+      const hits = searchExamples({
+        query: args.query, area: args.area, repo: args.repo, limit: args.limit ?? 20,
+      });
       return text({
         matches: hits.length,
-        repository: 'https://github.com/abap2UI5/samples',
-        next: 'read the `path` of the closest match — it is a complete, gated app, not a fragment',
+        searched,
+        ...(notSearched.length ? { notSearched } : {}),
+        repositories: Object.fromEntries(found.map((c) => [c.repo, c.url])),
+        next: 'read the `path` of the closest match, in the repository its `repo` names — it is a complete, gated app, not a fragment',
         entries: hits,
       });
     }

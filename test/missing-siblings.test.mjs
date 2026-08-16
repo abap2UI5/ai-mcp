@@ -24,6 +24,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
       ...process.env,
       SAMPLES_CONTROLS_HOME: path.join(NOWHERE, 'samples-controls'),
       SAMPLES_HOME: path.join(NOWHERE, 'samples'),
+      SAMPLES_STACK_HOME: path.join(NOWHERE, 'samples-stack'),
       A2UI5_HOME: path.join(NOWHERE, 'abap2UI5'),
       AI_VIEW_CHECK_HOME: path.join(NOWHERE, 'linter'),
     },
@@ -101,12 +102,20 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     expectMissing(await call('remove_app', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('remove_app', { class_name: 'z2ui5_cl_demo' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
 
-    // the sample catalogue - a different repository from the corpus, and the
-    // error has to say which one is missing rather than sending the reader to
-    // samples-controls for a sample-catalogue query
+    /* The sample catalogues - three repositories, none of them the corpus, and
+     * the error has to name each one rather than sending the reader to
+     * samples-controls for a sample-catalogue query. `examples` only fails when
+     * ALL THREE are missing (one present is a thinner answer, not an error), so
+     * this is the state that has to produce it. */
     const SAMPLES = /samples checkout not found/;
-    expectMissing(await call('examples', {}), SAMPLES, 'SAMPLES_HOME');
-    expectMissing(await call('examples', { query: 'value help' }), SAMPLES, 'SAMPLES_HOME');
+    for (const call_args of [{}, { query: 'value help' }]) {
+      const r = await call('examples', call_args);
+      expectMissing(r, SAMPLES, 'SAMPLES_HOME');
+      const t = r.content[0].text;
+      assert.match(t, /samples-controls checkout not found/, `must name samples-controls: ${t}`);
+      assert.match(t, /samples-stack checkout not found/, `must name samples-stack: ${t}`);
+      assert.match(t, /SAMPLES_STACK_HOME/, `must name the stack env var: ${t}`);
+    }
 
     // linter-backed tool
     expectMissing(
