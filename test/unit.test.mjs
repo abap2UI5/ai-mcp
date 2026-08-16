@@ -353,7 +353,7 @@ const SAMPLES_MD = [
   '',
   '| Sample | Class |',
   '|---|---|',
-  '| Value Help: Suggestions and F4 Dialog<br><sub>f4 search help suggestion input</sub> | [`Z2UI5_CL_SMP_APP_009`](src/01/z2ui5_cl_smp_app_009.clas.abap) |',
+  '| Value Help: Suggestions and F4 Dialog<br><sub>f4 search help suggestion input</sub><br><sub>docs: [cookbook/expert_more/value_help](https://abap2ui5.github.io/docs/cookbook/expert_more/value_help)</sub> | [`Z2UI5_CL_SMP_APP_009`](src/01/z2ui5_cl_smp_app_009.clas.abap) |',
   '| Navigation — app state<br><sub>bookmark restore url</sub> | [`Z2UI5_CL_SMP_APP_321`](src/00/97/z2ui5_cl_smp_app_321.clas.abap) |',
 ].join('\n');
 
@@ -378,6 +378,20 @@ test('the sample catalogue parses into pointers, with and without a row header',
 
   // src/00 is experimental or a test app: readable, not to be copied wholesale
   assert.equal(all.find((e) => e.cls === 'Z2UI5_CL_SMP_APP_321').area, 'experimental-or-test');
+});
+
+/* The catalogue is generated over in abap2UI5/samples and grew a second block of
+ * small type - the `@docs` chapter links - under the keywords. A parser that
+ * expected exactly one would match no rows at all, and the failure mode is the
+ * quiet one: `examples` would answer "nothing found" for every query instead of
+ * raising anything. */
+test('a row keeps parsing when the catalogue adds another block of small type', () => {
+  const f4 = parseExamples(SAMPLES_MD).find((e) => e.cls === 'Z2UI5_CL_SMP_APP_009');
+  assert.equal(f4.label, 'Value Help: Suggestions and F4 Dialog');
+  // and the docs link is not mistaken for a search term
+  assert.equal(f4.keywords, 'f4 search help suggestion input');
+  assert.equal(searchExamples({ query: 'f4', rawText: SAMPLES_MD }).length, 1);
+  assert.equal(searchExamples({ query: 'cookbook', rawText: SAMPLES_MD }).length, 0);
 });
 
 test('searching the catalogue narrows on every term and ranks a keyword hit first', () => {
