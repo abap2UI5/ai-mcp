@@ -95,6 +95,53 @@ jobs:
       - name: What is in the tarball
         run: npm pack --dry-run
 
+      # ...and printing it is not the same as proving it. `npm test` runs
+      # against the WORKING TREE, where every file exists whether or not
+      # `files` lists it, so the one defect this package can ship - a lib/
+      # module left out of the allowlist - is invisible to the whole suite.
+      # So the tarball is installed into a scratch project and driven over
+      # stdio the way an MCP client drives it: the server has to start from
+      # its bin, list its tools, and degrade with its actionable message when
+      # a checkout is missing. That is the level-1 surface, and it is the part
+      # a published version has to get right, since everything else needs
+      # sibling checkouts no CI job here has.
+      - name: The packed tarball starts and answers
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination /tmp
+          TARBALL=$(ls /tmp/abap2ui5-mcp-*.tgz)
+          mkdir -p /tmp/packtest && cd /tmp/packtest
+          echo '{"name":"packtest","version":"1.0.0","private":true}' > package.json
+          npm install --no-audit --no-fund "$TARBALL"
+          node -e '
+            const { spawn } = require("child_process");
+            const p = spawn("./node_modules/.bin/abap2ui5-mcp", [], {
+              stdio: ["pipe", "pipe", "ignore"],
+              // no checkout anywhere: the level-1 contract is what is tested
+              env: { ...process.env, SAMPLES_CONTROLS_HOME: "/nope", SAMPLES_HOME: "/nope",
+                     SAMPLES_STACK_HOME: "/nope", A2UI5_HOME: "/nope", AI_VIEW_CHECK_HOME: "/nope" },
+            });
+            let buf = "";
+            p.stdout.on("data", (d) => (buf += d));
+            const send = (o) => p.stdin.write(JSON.stringify(o) + "\n");
+            send({jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2024-11-05",capabilities:{},clientInfo:{name:"pack",version:"0"}}});
+            send({jsonrpc:"2.0",id:2,method:"tools/list"});
+            send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"validate_view",arguments:{xml:"<x/>"}}});
+            setTimeout(() => {
+              p.kill();
+              const msgs = buf.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+              const expect = (cond, what) => { if (!cond) { console.error("FAIL: " + what + "\n" + buf.slice(0, 2000)); process.exit(1); } console.log("ok  " + what); };
+              const init = msgs.find((m) => m.id === 1);
+              const list = msgs.find((m) => m.id === 2);
+              const call = msgs.find((m) => m.id === 3);
+              expect(init && init.result.serverInfo.name === "abap2ui5", "the installed server starts and identifies itself");
+              expect(init.result.serverInfo.version === require("./node_modules/@abap2ui5/mcp/package.json").version, "it serves the packaged version");
+              expect(list && list.result.tools.length > 0, "tools/list answers from the tarball (lib/ came along)");
+              expect(call && call.result.isError && /checkout not found/.test(call.result.content[0].text),
+                "a missing checkout is an actionable message, not a crash");
+            }, 4000);
+          '
+
       - name: Publish
         if: startsWith(github.ref, 'refs/tags/')
         run: npm publish --provenance --access public

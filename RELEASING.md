@@ -25,10 +25,13 @@ The everyday correction is a new version. What genuinely cannot be taken back
 is the **package name** — `@abap2ui5/mcp` — so that is the one thing worth
 getting right the first time.
 
-## One-time setup
+## One-time setup — what a maintainer still has to do by hand
+
+Everything below needs a human with npm credentials; no workflow can do it.
 
 The npm organisation `abap2ui5` already owns the scope (`@abap2ui5/linter`
-and `@abap2ui5/render-runtime` are published under it).
+and `@abap2ui5/render-runtime` are published under it), so step 1 of the
+linter's checklist does not apply here.
 
 Trusted publishing can only be configured for a package that **already
 exists**, so the first publish is manual:
@@ -38,9 +41,23 @@ npm login
 npm publish --access public
 ```
 
+(No `--provenance` on that one: npm generates an attestation only from a
+supported CI and aborts anywhere else. The bootstrap version ships without it;
+every release the workflow cuts has it.)
+
 Then, on npmjs.com → `@abap2ui5/mcp` → **Settings → Trusted Publisher**, point
 it at this repository and `release.yml`. From the second release on the
 workflow publishes with no token at all.
+
+Two things follow the first publish, in other repositories, and neither is
+automatic:
+
+- the [VS Code extension](https://github.com/abap2UI5/vscode-extension)
+  registers this server as `npx --yes github:abap2UI5/ai-mcp` — the whole
+  reason for publishing is that this resolves to whatever `main` holds that
+  day, so it should become `npx --yes @abap2ui5/mcp@<version>`;
+- the README's setup section still tells everyone to `git clone` this
+  repository, which stops being necessary for the tools that need no corpus.
 
 ## Cutting a release
 
@@ -60,6 +77,40 @@ workflow publishes with no token at all.
 
 To rehearse everything except the publish, dispatch the workflow by hand from
 the Actions tab — same gates, same tarball, no registry write.
+
+## What the first release was checked against
+
+Done once, by hand, before there was anything on npm — repeat it if
+`package.json`'s `files`, `bin` or `dependencies` ever change:
+
+- **The manifest carries everything a published package needs**: `name`,
+  `version`, `description`, `bin` (`abap2ui5-mcp` → `server.mjs`, which has
+  its shebang), `files`, `engines` (node >= 22), `repository`, `homepage`,
+  `bugs`, `license`, `keywords`, `publishConfig.access: public`. No `main` and
+  no `exports`, deliberately: this is a program, not a library.
+- **The tarball is 12 files, 44 kB packed / 130 kB unpacked**: `server.mjs`,
+  `lib/`, `README.md`, `AGENTS.md`, `LICENSE`, `package.json`. No tests, no
+  workflows, no lockfile. `AGENTS.md` ships on purpose — an agent that
+  installed this package can read the contract of the thing it is driving.
+- **The packed tarball starts and answers.** Installed into a scratch project
+  and driven over stdio through its `bin`: initialize, `tools/list`, and a
+  tool call with every checkout absent, which has to come back as the
+  actionable message rather than a crash. That is now a workflow step
+  (`The packed tarball starts and answers`) instead of a thing to remember —
+  `npm test` runs against the working tree, where a `lib/` module missing from
+  `files` still exists, so nothing else in the suite can see that defect.
+- **The level-1 tools work from the tarball**: with only `AI_VIEW_CHECK_HOME`
+  pointed at a linter checkout, `validate_view` returned `ok: true` on a clean
+  view and `screenshot_view` returned a PNG. Neither needs the corpus.
+
+One thing worth knowing before the first `npm publish`: **the install is
+~45 MB**, and 19 MB of that is `playwright` + `playwright-core`, which only
+`run_app` uses (via a dynamic import). `npx --yes @abap2ui5/mcp` therefore
+pays for a browser driver before it validates a single view. Marking the
+dependency `optional` would not help — npm installs optional dependencies by
+default — so the fix is the shape `@abap2ui5/linter` arrived at: a separate
+package carrying the heavy runtime, declared as an optional PEER. Worth doing,
+not worth blocking the first release on.
 
 ## What is NOT covered by the release gate
 

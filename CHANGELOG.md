@@ -129,3 +129,12 @@ was only installable as `npx --yes github:abap2UI5/ai-mcp`.
 
 - **CI clones `samples-controls`,** not `ai-demokit` — that repository was
   renamed, and the clone worked only through GitHub's redirect.
+
+- **The release proves the tarball, not just the working tree.** `npm test`
+  runs where every file exists whether or not `files` lists it, so the one
+  defect this package can ship — a `lib/` module left out of the allowlist —
+  was invisible to the entire suite, and the release job only printed the
+  tarball contents. It now installs the tarball into a scratch project and
+  drives the installed `bin` over stdio: initialize, `tools/list`, and one
+  tool call with every checkout absent, which has to come back as the
+  actionable message rather than a crash.
