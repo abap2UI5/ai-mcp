@@ -34,12 +34,13 @@ export const TOOL_NAMES = [
   'pitfalls',
   'remove_app',
   'run_app',
+  'scaffold_app',
   'scope_of',
   'screenshot_view',
   'validate_view',
 ];
 
-test('stdio smoke: initialize, 13 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
+test('stdio smoke: initialize, 14 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));

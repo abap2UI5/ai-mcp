@@ -27,6 +27,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
       SAMPLES_STACK_HOME: path.join(NOWHERE, 'samples-stack'),
       A2UI5_HOME: path.join(NOWHERE, 'abap2UI5'),
       AI_VIEW_CHECK_HOME: path.join(NOWHERE, 'linter'),
+      APP_TEMPLATE_HOME: path.join(NOWHERE, 'app-template'),
     },
   });
   let buf = '';
@@ -85,7 +86,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     assert.deepEqual(
       list.result.tools.map((t) => t.name).sort(),
       ['app_guide', 'backend', 'build_backend', 'capabilities', 'deploy_app', 'examples', 'generation_rules',
-        'pitfalls', 'remove_app', 'run_app', 'scope_of', 'screenshot_view', 'validate_view'],
+        'pitfalls', 'remove_app', 'run_app', 'scaffold_app', 'scope_of', 'screenshot_view', 'validate_view'],
     );
 
     // samples-controls-backed tools
@@ -93,6 +94,9 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     expectMissing(await call('capabilities', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('capabilities', { query: 'popup' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('generation_rules', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    // the starter project comes from a repository of its own
+    expectMissing(await call('scaffold_app', {}), /app-template/, 'APP_TEMPLATE_HOME');
+    expectMissing(await call('scaffold_app', { class: 'zcl_my_app' }), /app-template/, 'APP_TEMPLATE_HOME');
     expectMissing(await call('scope_of', { entities: ['sap.m.Wizard'] }), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(
       await call('deploy_app', { class_name: 'z2ui5_cl_demo', abap_source: 'CLASS z2ui5_cl_demo DEFINITION. INTERFACES z2ui5_if_app.' }),

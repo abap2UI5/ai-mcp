@@ -52,7 +52,7 @@ error — which repo, how to clone it, which env var; see `missingSibling` in
 `run_app`/`backend` need the core repo (and so do `pitfalls` and `app_guide`,
 whose documents are maintained beside the framework sources), almost
 everything else needs samples-controls. The README calls the linter
-"optional"; that is true for 11 of the 13 tools and fatal for the two that ARE
+"optional"; that is true for 12 of the 14 tools and fatal for the two that ARE
 the fast loop. `test/missing-siblings.test.mjs` pins this contract per tool by
 pointing every env var at a nonexistent directory.
 
@@ -138,7 +138,7 @@ importing it in a test hangs the run rather than failing it — which is why
 it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 13 tools,
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 14 tools,
 a capabilities query) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
@@ -156,7 +156,7 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 13 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 14 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
 table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`

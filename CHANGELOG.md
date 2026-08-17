@@ -6,6 +6,26 @@ Nothing published yet — `@abap2ui5/mcp` has never been on npm. Everything
 below is what the first version will carry, and what changed since the server
 was only installable as `npx --yes github:abap2UI5/ai-mcp`.
 
+- **`scaffold_app`: the files a new project starts from.** The server could
+  tell an agent how to write a class (`app_guide`) and where to put one so it
+  could be run (`deploy_app`, into the corpus' scratch package) — but not how
+  to start a REPOSITORY, which is what somebody building an app of their own
+  actually needs. Everything around the class is the part an agent cannot
+  invent: the abaplint config with the framework pinned at a release under the
+  `branch` key, the `abap2ui5lint.jsonc` the render gate needs to run rather
+  than skip, the CI workflow, the `.abapgit.xml`, and the `.clas.xml` sidecar
+  whose `CLSNAME` must match the class or the object does not activate at all.
+  Served live from abap2UI5/app-template, the repository this ecosystem
+  already points people at, rather than embedded — a copy here would be a
+  second answer to "what does a new project look like".
+
+  `class` renames it throughout: the ABAP, the sidecar's `CLSNAME` (upper case
+  there, lower in the source — that asymmetry is why the template ships a
+  rename script rather than an instruction) and the file names. The name is
+  validated before it is substituted, since it reaches file paths. Proven end
+  to end: a scaffolded project installs and passes `npm run check` — abaplint
+  0 issues, linter 0 findings with the render gate on.
+
 - **`screenshot_view`: an agent can SEE the view in seconds.** The linter
   gained `--screenshot` — it reconstructs the view from the builder calls,
   seeds it from the class's own `TYPES`/`DATA` and photographs it in the same

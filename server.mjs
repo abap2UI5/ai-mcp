@@ -11,6 +11,7 @@
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
  *   examples          which app already does this (three SAMPLES.md, live-parsed)
  *   app_guide         how to BUILD an app (abap2UI5 docs/agents/building-apps.md)
+ *   scaffold_app      the files a NEW project starts from (abap2UI5/app-template)
  *   generation_rules  how to PORT a demo-kit sample (generation-prompt.txt)
  *   pitfalls          the abap-check / ui5-check catalogues (defects a green CI misses)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
@@ -22,9 +23,11 @@
  *   remove_app        delete a dev app from src/zz_dev/ again
  *   backend           start/stop/status of the express backend
  *
- * The intended agent loop: examples/app_guide -> validate_view + screenshot_view
- * (seconds, no system) -> deploy_app -> build_backend -> run_app -> read the
- * errors, LOOK at the running app -> edit -> repeat.
+ * The intended agent loop: examples/app_guide -> write the class (scaffold_app
+ * first, when the user wants a project of their own rather than a class) ->
+ * validate_view + screenshot_view (seconds, no system) -> deploy_app ->
+ * build_backend -> run_app -> read the errors, LOOK at the running app ->
+ * edit -> repeat.
  *
  * There are two ways to SEE a view here and they cost three orders of magnitude
  * apart. screenshot_view photographs the RECONSTRUCTED view in the linter's
@@ -45,7 +48,8 @@ import { searchExamples, exampleSummary, catalogueFiles } from './lib/examples.m
 import { searchPitfalls } from './lib/pitfalls.mjs';
 import { readGuide, sliceGuide, guideChapters, guideFile, GUIDE_PATH } from './lib/guide.mjs';
 import { parseSizes, screenshotSource } from './lib/screenshot.mjs';
-import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, resolveAppTemplate, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
+import { scaffold, validClassName, TEMPLATE_FILES } from './lib/scaffold.mjs';
 import {
   deployApp,
   removeApp,
@@ -159,6 +163,40 @@ const TOOLS = [
       + 'If you are building an app of your own, `app_guide` is the one you want — this document '
       + 'assumes an input sample you do not have and a corpus you are not writing into.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'scaffold_app',
+    description:
+      'The files a NEW abap2UI5 project starts from, named after the app you are writing — served '
+      + 'live from abap2UI5/app-template, the repository this ecosystem points people at to begin. '
+      + 'Call this when the user wants an app of their own rather than a class to paste somewhere: '
+      + '`app_guide` tells you how to write the CLASS, this hands you everything AROUND it that you '
+      + 'cannot invent — the abaplint config with the framework pinned at a release, the '
+      + 'abap2ui5lint config the render gate needs, the CI workflow, the abapGit metadata, an '
+      + 'AGENTS.md briefing for whoever works on the project next, and one working app class with '
+      + 'its .clas.xml sidecar. Pass `class` and the class is renamed throughout, INCLUDING the '
+      + "sidecar's CLSNAME and the file names — renaming only the ABAP produces an object that "
+      + 'looks right and does not activate. Returns file paths and contents for you to write; it '
+      + 'writes nothing itself.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        class: {
+          type: 'string',
+          description:
+            'the app class, lower case, e.g. `zcl_my_app` (^[zy]c[lx]_, letters digits underscore). '
+            + 'Left out, the files come back on the template\'s own `zcl_app_001`.',
+        },
+        package: {
+          type: 'string',
+          description: "short text of the ABAP package, e.g. \"My App\" (the sidecar's CTEXT)",
+        },
+        repo: {
+          type: 'string',
+          description: 'the abapGit repository name written into .abapgit.xml, e.g. `my-app`',
+        },
+      },
+    },
   },
   {
     name: 'pitfalls',
@@ -383,6 +421,10 @@ const SIBLING_REPOS = {
     resolve: resolveViewCheck,
     hint: 'clone https://github.com/abap2UI5/linter as a sibling of ai-mcp, or point AI_VIEW_CHECK_HOME at an existing checkout',
   },
+  'app-template': {
+    resolve: resolveAppTemplate,
+    hint: 'clone https://github.com/abap2UI5/app-template as a sibling of ai-mcp, or point APP_TEMPLATE_HOME at an existing checkout',
+  },
 };
 
 function missingSibling(...repos) {
@@ -535,6 +577,43 @@ async function handle(name, args = {}, ctx = {}) {
         matches: sections.length,
         sections,
         next: 'write the class, then validate_view + screenshot_view — both answer in seconds, before any build',
+      });
+    }
+    case 'scaffold_app': {
+      const miss = missingSibling('app-template');
+      if (miss) return miss;
+
+      /* Refused rather than passed through: the name is substituted into the
+       * sidecar's CLSNAME and into file names, so anything path-like or not an
+       * ABAP identifier has to stop here, not at the agent's `write`. */
+      const cls = (args.class || '').toLowerCase();
+      if (cls && !validClassName(cls)) {
+        return toolError(`"${args.class}" does not look like an ABAP class name — expected `
+          + '^[zy]c[lx]_ followed by letters, digits or underscores (max 30 characters), e.g. zcl_my_app');
+      }
+
+      const root = resolveAppTemplate();
+      const { files, missing } = scaffold(root, {
+        cls,
+        packageText: args.package,
+        repo: args.repo,
+      });
+
+      if (missing.length === TEMPLATE_FILES.length) {
+        return toolError(`the app-template checkout at ${root} has none of the files this serves — `
+          + 'update it (git pull), or point APP_TEMPLATE_HOME at a complete checkout');
+      }
+
+      return text({
+        source: 'abap2UI5/app-template',
+        class: cls || 'zcl_app_001',
+        files,
+        /* Reported, never silent: this list is a claim about another
+         * repository, and a project quietly missing its CI workflow is not
+         * noticed until somebody wonders why nothing is checked. */
+        ...(missing.length ? { missing, warning: 'the template no longer has these — the project is incomplete without them' } : {}),
+        next: 'write these files, then `npm install` and `npm run check` (abaplint + the abap2UI5-linter). '
+          + 'The app class is a working starting point: read app_guide before changing it.',
       });
     }
     case 'generation_rules': {

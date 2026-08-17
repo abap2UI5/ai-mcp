@@ -10,6 +10,7 @@ import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import { sliceGuide, guideChapters } from '../lib/guide.mjs';
 import { parseSizes } from '../lib/screenshot.mjs';
+import { scaffold, validClassName, TEMPLATE_FILES } from '../lib/scaffold.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -624,4 +625,65 @@ test('a viewport is parsed, or refused by name', () => {
   for (const bad of ['huge', '390', '390*844', '390x', 'x844', '390x844px']) {
     assert.throws(() => parseSizes([bad]), /invalid size/, `expected rejection for '${bad}'`);
   }
+});
+
+// ----------------------------------------------------------- scaffold ----
+/* The class name is substituted into the sidecar's CLSNAME and into file
+ * names, so it is validated before it is used. An object whose ABAP and whose
+ * CLSNAME disagree looks right and does not activate - which is why
+ * app-template ships a rename script rather than an instruction. */
+test('a scaffold class name is an ABAP class name, or it is refused', () => {
+  for (const ok of ['zcl_my_app', 'ycl_app', 'zcx_error', 'zcl_a1_b2']) {
+    assert.equal(validClassName(ok), true, ok);
+  }
+  for (const bad of ['', 'zcl_', 'cl_my_app', 'zcl-my-app', '../etc/passwd',
+    'zcl_app/../../x', 'zcl_my app', 'zcl_' + 'x'.repeat(30)]) {
+    assert.equal(validClassName(bad), false, "expected refusal for '" + bad + "'");
+  }
+});
+
+test('scaffolding renames the class in the ABAP, the sidecar and the file name', (t) => {
+  const root = path.join(ROOT, '..', 'app-template');
+  if (!fs.existsSync(path.join(root, 'abaplint.jsonc'))) {
+    t.skip('app-template sibling not found');
+    return;
+  }
+  const { files, missing } = scaffold(root, {
+    cls: 'zcl_invoice_app', packageText: 'Invoice App', repo: 'invoice-app',
+  });
+  assert.deepEqual(missing, [], 'the template still has every file this serves');
+  assert.equal(files.length, TEMPLATE_FILES.length);
+
+  const at = (suffix) => files.find((f) => f.path.endsWith(suffix));
+  assert.ok(at('src/zcl_invoice_app.clas.abap'), 'the class file is named after the class');
+  assert.ok(at('src/zcl_invoice_app.clas.xml'), 'and so is its sidecar');
+  assert.match(at('.clas.abap').text, /CLASS zcl_invoice_app DEFINITION/);
+  // upper case in the sidecar, lower in the ABAP - that asymmetry is the bug
+  assert.match(at('.clas.xml').text, /<CLSNAME>ZCL_INVOICE_APP<\/CLSNAME>/);
+  assert.match(at('package.devc.xml').text, /<CTEXT>Invoice App<\/CTEXT>/);
+  assert.match(at('.abapgit.xml').text, /<NAME>invoice-app<\/NAME>/);
+
+  assert.ok(!files.some((f) => /zcl_app_001/i.test(f.text)),
+    'no file still carries the template own class name');
+  assert.ok(files.some((f) => f.path === 'AGENTS.md'),
+    'the briefing ships with the project - an agent without one is the gap this closes');
+});
+
+test('scaffolding without a class name returns the template as it stands', (t) => {
+  const root = path.join(ROOT, '..', 'app-template');
+  if (!fs.existsSync(path.join(root, 'abaplint.jsonc'))) {
+    t.skip('app-template sibling not found');
+    return;
+  }
+  const { files } = scaffold(root, {});
+  assert.ok(files.some((f) => f.path === 'src/zcl_app_001.clas.abap'));
+});
+
+test('a template missing a file reports it rather than shipping a shorter project', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-tpl-'));
+  fs.writeFileSync(path.join(dir, 'abaplint.jsonc'), '{}');
+  const { files, missing } = scaffold(dir, {});
+  assert.deepEqual(files.map((f) => f.path), ['abaplint.jsonc']);
+  assert.ok(missing.includes('src/zcl_app_001.clas.abap'));
+  assert.equal(missing.length, TEMPLATE_FILES.length - 1);
 });

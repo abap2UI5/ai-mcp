@@ -48,8 +48,8 @@ rather than failing — the server starts either way.
 
 ### Level 2 — the catalogues and deploying (~110 MB)
 
-`examples`, `capabilities`, `app_guide`, `generation_rules`, `pitfalls`,
-`scope_of`, `deploy_app`.
+`examples`, `capabilities`, `app_guide`, `scaffold_app`, `generation_rules`,
+`pitfalls`, `scope_of`, `deploy_app`.
 
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5          # A2UI5_HOME
@@ -135,6 +135,7 @@ that need a real SAP system.
 |---|---|
 | `capabilities` | Query the verified capability map (samples-controls CAPABILITIES.md, parsed live — no drift). Ask before assuming a UI5 feature is impossible: `{ query: "tree binding" }`, `{ status: "not-expressible" }` |
 | `app_guide` | **How to build an app**, live from the framework checkout (abap2UI5 `docs/agents/building-apps.md`): app class template, lifecycle, the view-builder chain, binding, events, popups, navigation, portability. Whole guide by default; `{ section: "5" }` or `{ query: "popup" }` narrows it |
+| `scaffold_app` | **The files a new project starts from**, live from abap2UI5/app-template: both gate configs with the framework pinned, the CI workflow, the abapGit metadata, an `AGENTS.md` briefing and a working app class with its sidecar. `{ class: "zcl_my_app" }` renames it throughout — the ABAP, the sidecar's `CLSNAME` and the file names, which is the part that decides whether the object activates. Returns files to write; writes nothing itself |
 | `generation_rules` | The rulebook for **porting a UI5 demo-kit sample** into the samples-controls corpus. A different job from `app_guide` — it assumes an input sample and the corpus' naming |
 | `pitfalls` | The catalogues of defects **a green CI does not catch**, parsed live from the abap2UI5 checkout: `{ area: "abap" }` (abapGit round trip and import, activation, extended check, downport/transpiler, runtime) and `{ area: "view" }` (names the 1.71 floor does not have, layout that only works on a newer release, views that fail to *load*). Every entry is a defect that actually shipped, with its evidence. `validate_view` decides what a rule can decide — this is the rest |
 | `scope_of` | In/out-of-scope verdict for UI5 controls (since <= 1.71, not deprecated) |
@@ -156,14 +157,16 @@ existing port, look at it, then build mine".
    before writing a line of ABAP.
 2. `app_guide` — once per session, before writing any ABAP. (`generation_rules`
    instead, if the job is porting a named demo-kit sample.)
-3. Write the class, then `validate_view` **and** `screenshot_view` — the
+3. `scaffold_app` — when the user wants a project of their own, not a class to
+   paste into one that exists.
+4. Write the class, then `validate_view` **and** `screenshot_view` — the
    findings and the picture, both in seconds and neither needing a build. Most
    iterations should end here.
-4. `deploy_app` — abaplint against the full framework context.
-5. `build_backend` — incremental after the first full build.
-6. `run_app` — read the errors, **look at the screenshot**. Edit, validate,
+5. `deploy_app` — abaplint against the full framework context.
+6. `build_backend` — incremental after the first full build.
+7. `run_app` — read the errors, **look at the screenshot**. Edit, validate,
    deploy, build, run again.
-7. `pitfalls` before you call it done — the defects no gate here can see: what
+8. `pitfalls` before you call it done — the defects no gate here can see: what
    the class does on a *real* system (abapGit import, activation, the extended
    check) and what the view does on the *oldest* one. A green loop is not the
    same as a shipped app.
