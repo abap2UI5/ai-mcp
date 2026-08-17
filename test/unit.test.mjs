@@ -142,11 +142,33 @@ test('the live parsers report, never throw, on a damaged document', () => {
 // error paths are sibling-free. (The happy path writes into ai-demokit and
 // is covered by the stdio smoke instead.)
 
-test('deployApp rejects a class name outside the z2ui5_cl_ namespace', () => {
-  assert.throws(
-    () => deployApp({ className: 'zcl_my_app', source: 'x' }),
-    /invalid class name/,
-  );
+test('deployApp rejects a class name outside the customer namespace', () => {
+  for (const bad of ['acl_my_app', 'cl_my_app', 'my_app', '1cl_app', '']) {
+    assert.throws(
+      () => deployApp({ className: bad, source: 'x' }),
+      /invalid class name/,
+      `expected rejection for '${bad}'`,
+    );
+  }
+});
+
+/* The namespace this accepts is the CUSTOMER namespace, not the corpus' port
+ * convention. It was `^z2ui5_cl_`, which is what the demo-kit ports are called
+ * - and this server exists for an agent building its own app. abap2UI5's own
+ * app-template ships `zcl_app_001`, so the recommended starting point was the
+ * one name every tool here refused. */
+test('deployApp accepts the customer-namespace names a user app actually has', () => {
+  const source = (cls) => `CLASS ${cls} DEFINITION. INTERFACES z2ui5_if_app. ENDCLASS.`;
+  for (const good of ['zcl_app_001', 'ycl_app', 'z2ui5_cl_my_app', 'zcx_error']) {
+    // it gets past validation - what stops it here is the missing corpus
+    // checkout it would write into, which is a different error entirely
+    assert.doesNotThrow(
+      () => { try { deployApp({ className: good, source: source(good) }); } catch (e) {
+        if (/invalid class name/.test(e.message)) throw e;
+      } },
+      `expected '${good}' to pass the name gate`,
+    );
+  }
 });
 
 test('deployApp rejects an over-long class name', () => {
@@ -188,8 +210,24 @@ test('removeApp rejects a name that would escape the dev sandbox', () => {
 });
 
 test('removeApp rejects the same names deployApp does', () => {
-  for (const bad of ['zcl_my_app', 'z2ui5_cl_' + 'a'.repeat(30), '', 'z2ui5_cl_a/b']) {
+  for (const bad of ['acl_my_app', 'z2ui5_cl_' + 'a'.repeat(30), '', 'z2ui5_cl_a/b', 'zcl_a.b', 'zcl_a\\b', 'zcl a']) {
     assert.throws(() => removeApp(bad), /invalid class name/, `expected rejection for '${bad}'`);
+  }
+});
+
+/* Widening the namespace must not widen what can be WRITTEN. Every one of
+ * these is a name whose only purpose is to leave src/zz_dev, and each has to
+ * die in the name gate rather than in path.join. */
+test('a wider namespace is still no way out of the dev sandbox', () => {
+  for (const escape of [
+    '../../src/01/z2ui5_cl_smpc_app_001',
+    'z2ui5_cl_x/../../../etc/passwd',
+    '/etc/passwd',
+    'zcl_app/../../x',
+    'zcl_app .clas',
+  ]) {
+    assert.throws(() => deployApp({ className: escape, source: 'x' }), /invalid class name/, `deploy '${escape}'`);
+    assert.throws(() => removeApp(escape), /invalid class name/, `remove '${escape}'`);
   }
 });
 
