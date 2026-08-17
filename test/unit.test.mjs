@@ -8,6 +8,8 @@ import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
 import { parseExamples, searchExamples, CATALOGUES } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
+import { sliceGuide, guideChapters } from '../lib/guide.mjs';
+import { parseSizes } from '../lib/screenshot.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -558,4 +560,68 @@ test('a bold row header without a dash after it is still the title', () => {
   // and the dashed shape the other two catalogues use is untouched
   const [dashed] = parseExamples(SAMPLES_MD_WITH_SUMMARY);
   assert.equal(dashed.label, 'Value Help: Suggestions and F4 Dialog');
+});
+
+// --------------------------------------------------------------- guide ----
+/* The app-building guide, sliced by chapter the way the pitfalls catalogues
+ * are. The document itself lives in the abap2UI5 checkout; the slicing does
+ * not need it. */
+
+const GUIDE_MD = [
+  '# Building apps with abap2UI5 — the agent guide',
+  '',
+  'Self-contained reference. When this guide and the code disagree, the code wins.',
+  '',
+  '## 1. The model in one paragraph',
+  '',
+  'An abap2UI5 app is one ABAP class implementing z2ui5_if_app.',
+  '',
+  '## 5. Events',
+  '',
+  'Register a named event and read it back on the next roundtrip.',
+  '',
+  '## 6. Popups, popovers, messages',
+  '',
+  'A popup is a second view displayed into the popup slot.',
+].join('\n');
+
+test('the guide keeps its intro as a section of its own', () => {
+  const sections = sliceGuide(GUIDE_MD);
+  assert.equal(sections.length, 4);
+  assert.equal(sections[0].heading, '(intro)');
+  assert.match(sections[0].body, /the code wins/, 'the "how to read this" half must survive');
+  assert.deepEqual(guideChapters(GUIDE_MD).slice(1), ['1. The model in one paragraph', '5. Events', '6. Popups, popovers, messages']);
+});
+
+/* A chapter can be asked for by number or by a word in its heading. A NUMBER
+ * has to mean the chapter number and nothing else: falling through to a
+ * substring match made `section: "5"` also return the view-builder chapter,
+ * whose heading carries `z2ui5_cl_ui5_view_builder`. A digit is a terrible
+ * needle in a document about a framework with one in its name. */
+test('a chapter can be asked for by number or by name, and a number means the number', () => {
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: '5' }).map((s) => s.heading), ['5. Events']);
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: 'events' }).map((s) => s.heading), ['5. Events']);
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: 'popup' }).map((s) => s.heading), ['6. Popups, popovers, messages']);
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: 'nope' }), []);
+});
+
+test('a guide query narrows to whole chapters that carry every term', () => {
+  assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip' }).map((s) => s.heading), ['5. Events']);
+  // AND, like every other search here
+  assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip popup' }), []);
+});
+
+// ---------------------------------------------------------- screenshot ----
+/* The viewport list screenshot_view takes. Refused rather than guessed at: a
+ * size that quietly fell back to the default would return a picture of the
+ * wrong viewport, and the viewport is the question being asked. */
+test('a viewport is parsed, or refused by name', () => {
+  assert.deepEqual(parseSizes(['390x844', '1280x900']), [
+    { width: 390, height: 844 }, { width: 1280, height: 900 },
+  ]);
+  assert.equal(parseSizes([]), undefined, 'no sizes means the default, not an empty list');
+  assert.equal(parseSizes(undefined), undefined);
+  for (const bad of ['huge', '390', '390*844', '390x', 'x844', '390x844px']) {
+    assert.throws(() => parseSizes([bad]), /invalid size/, `expected rejection for '${bad}'`);
+  }
 });

@@ -1,11 +1,26 @@
 # AGENTS.md — ai-mcp
 
 Single source of truth for agents working on the **abap2UI5 MCP server** —
-the `capabilities → deploy_app → build_backend → run_app` loop exposed to MCP
-clients, no SAP system required.
+the `app_guide → validate_view/screenshot_view → deploy_app → build_backend →
+run_app` loop exposed to MCP clients, no SAP system required.
 
-> This entire project is in **English**. Source files are **7-bit ASCII**
-> (stated at `lib/capabilities.mjs` — keep it that way repo-wide).
+**The loop has a cheap half and an expensive half, and keeping them apart is
+the point.** `validate_view` and `screenshot_view` both work from SOURCE
+through the linter's render harness: seconds, no backend, no transpile, and
+blind to everything that only exists at runtime. `build_backend`/`run_app`
+boot the real transpiled app: tens of minutes for the first build, and the
+only place the ABAP actually runs. A tool that moves work from the second half
+to the first is worth more here than almost anything else — the expensive half
+is what an agent's feedback loop is made of.
+
+> This entire project is in **English**. No non-ASCII **literal** goes in a
+> source file — the CAPABILITIES.md status marks are built with
+> `String.fromCodePoint` for exactly this reason (`lib/capabilities.mjs`), so
+> a parser's data can never depend on how an editor saved a glyph. Prose is a
+> different matter: comments and the tool descriptions have always used em
+> dashes and stay as they are. (This paragraph said "source files are 7-bit
+> ASCII", which no file in the repo has ever been, `lib/capabilities.mjs`
+> included.)
 
 ## The one thing to understand first: this repo cannot work alone
 
@@ -20,10 +35,10 @@ is no silent fallback to the sibling guess.
 | Env var | Default sibling | Used for |
 | --- | --- | --- |
 | `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
-| `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/` |
+| `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/`, `.claude/skills/{abap-check,ui5-check}/SKILL.md` (`pitfalls`), `docs/agents/building-apps.md` (`app_guide`) |
 | `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `SAMPLES.md` — one of the three catalogues `examples` searches |
 | `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `SAMPLES.md` — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
-| `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config` (via `importViewCheck`) |
+| `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view` + `screenshot_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config`, `./rule-docs` (via `importViewCheck`) |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
 `A2UI5_MCP_CHROMIUM` (browser path), and the child-process timeouts
@@ -33,11 +48,13 @@ and `A2UI5_MCP_BUILD_TIMEOUT_MS` (default 30 min).
 A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool returns a uniform, actionable
 error — which repo, how to clone it, which env var; see `missingSibling` in
-`server.mjs`) — `validate_view` needs the linter, `run_app`/`backend` need
-the core repo, almost everything else needs samples-controls. The README calls the
-linter "optional"; that is true for 9 of 10 tools and fatal for
-`validate_view`. `test/missing-siblings.test.mjs` pins this contract per
-tool by pointing every env var at a nonexistent directory.
+`server.mjs`) — `validate_view`/`screenshot_view` need the linter,
+`run_app`/`backend` need the core repo (and so do `pitfalls` and `app_guide`,
+whose documents are maintained beside the framework sources), almost
+everything else needs samples-controls. The README calls the linter
+"optional"; that is true for 11 of the 13 tools and fatal for the two that ARE
+the fast loop. `test/missing-siblings.test.mjs` pins this contract per tool by
+pointing every env var at a nonexistent directory.
 
 `examples` is the ONE exception and deliberately so: it reads three
 catalogues, and one of them missing is not a reason to refuse the other two.
@@ -62,15 +79,29 @@ changes upstream, this repo must change in the same breath:
   parser + legend in `lib/capabilities.mjs`), `scripts/generation-prompt.txt`,
   `scripts/scope-of.mjs` CLI output, `scripts/e2e-build.mjs`, `abaplint.jsonc`,
   the `src/zz_dev/` package convention.
+- samples-controls' SAMPLES.md carries its row header entirely in bold with no
+  dash after it (`| **sap.m.Bar**<br>…`), which is the shape the row pattern
+  had to learn; and 241 of its 430 rows carry only the LIBRARY there
+  (`| **sap.m**<br>…`) rather than the control. That is an upstream generator
+  gap, not a parser one — those ports come back titled by their library, and
+  the fix belongs in samples-controls' `generate-samples-md`.
 - abap2UI5 core: `node/srv/express.mjs`, `node/setup/abap_transpile.json`,
-  `node/downport/`, `node/output/init.mjs`.
-- abap2UI5-linter: the package `exports` map entries `.`, `./findings` and
-  `./config` (and the shapes behind them: `checkFiles`, `severityOf` /
-  `severityRank` / `SEVERITIES`, `findConfigFrom` / `loadConfig` /
-  `applyConfig`) — imported **via the exports map** by `importViewCheck` in
-  `lib/repos.mjs`, so internal file-layout refactors there are safe, but a
-  removed or renamed export breaks `validate_view` even while the linter's
-  own tests stay green.
+  `node/downport/`, `node/output/init.mjs`, the two `.claude/skills/*-check/`
+  catalogues, and **`docs/agents/building-apps.md`** — the app-building guide
+  `app_guide` serves. Its `## ` headings are the chapters that tool slices on;
+  a rename of the file is a broken tool here (reported, not silent — the tool
+  names the path it looked in).
+- abap2UI5-linter: the package `exports` map entries `.`, `./findings`,
+  `./config` and `./rule-docs` (and the shapes behind them: `checkFiles` and
+  `screenshotFiles`, `severityOf` / `severityRank` / `SEVERITIES`,
+  `findConfigFrom` / `loadConfig` / `applyConfig`, `RULE_DOCS`) — imported
+  **via the exports map** by `importViewCheck` in `lib/repos.mjs`, so internal
+  file-layout refactors there are safe, but a removed or renamed export breaks
+  a tool here even while the linter's own tests stay green. Two of those are
+  read **defensively**, because the linter is an UNPINNED sibling and can be
+  older than this server: a checkout without `screenshotFiles` gets a message
+  saying so, and one without `./rule-docs` costs the agent the explanations
+  and nothing else. Neither may cost it the findings.
 
 ## Side effects on sibling repos — expected, not a bug
 
@@ -98,11 +129,16 @@ npm test             # node --test: sibling-free units + the stdio smoke
 
 `test/unit.test.mjs` covers the units that need no sibling checkout
 (stripJsonc, the CAPABILITIES.md parser via its rawText parameter, the
-deployApp validation error paths, the BENIGN console filter);
-`test/missing-siblings.test.mjs` boots the real server with the sibling env
+SAMPLES.md row parser, the deployApp/removeApp name gate — including that a
+wider namespace is still no way out of `src/zz_dev` — the guide slicer, the
+viewport parser, the BENIGN console filter). **Import from `lib/`, never from
+`server.mjs`**: that file connects the stdio transport at module scope, so
+importing it in a test hangs the run rather than failing it — which is why
+`parseSizes` lives in `lib/screenshot.mjs` and not next to the tool that uses
+it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 10 tools,
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 13 tools,
 a capabilities query) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
@@ -120,7 +156,7 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 10 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 13 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
 table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`
@@ -144,7 +180,18 @@ legitimately slower.
   `remove_app` row). The server `version` is read from `package.json` at
   startup and asserted by the tests; the exact tool-name set is pinned in
   `test/smoke.test.mjs` (`TOOL_NAMES`) and `test/missing-siblings.test.mjs`
-  — adding/renaming a tool must update those lists.
+  — adding/renaming a tool must update those lists, and the COUNT is written
+  out in this file, in the README table and in the smoke test's name.
+- **A tool description is the only documentation the agent reads.** It never
+  sees this file, the README or a comment — it picks a tool from the sentence
+  in `TOOLS`. So two tools that answer neighbouring questions have to say
+  which is which IN those sentences: `app_guide` (building an app) against
+  `generation_rules` (porting a demo-kit sample), and `screenshot_view`
+  (seconds, the view alone) against `run_app` (a build, the running app).
+  Both pairs were mis-served exactly this way — `generation_rules` described
+  itself as "the canonical rulebook for writing an abap2UI5 app" while
+  serving a document that opens "You are porting one official UI5 demo kit
+  sample".
 - `lib/repos.mjs` exports **`VIEW_CHECK_DIRS`**: the checker's own directory
   name `linter` plus the **pre-rename aliases** `abap2UI5-linter` and
   `ai-view-check`, in that order. The VS Code extension mirrors the same list

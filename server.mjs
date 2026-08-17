@@ -10,18 +10,29 @@
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
  *   examples          which app already does this (three SAMPLES.md, live-parsed)
- *   generation_rules  the porting/building rulebook (generation-prompt.txt)
+ *   app_guide         how to BUILD an app (abap2UI5 docs/agents/building-apps.md)
+ *   generation_rules  how to PORT a demo-kit sample (generation-prompt.txt)
  *   pitfalls          the abap-check / ui5-check catalogues (defects a green CI misses)
  *   scope_of          in/out-of-scope verdict for a UI5 control (scope-of.mjs)
  *   validate_view     static gates via abap2UI5-linter (properties + render)
+ *   screenshot_view   SEE the view in seconds, no build and no backend
  *   deploy_app        write an app class into src/zz_dev/ (+ optional lint)
  *   build_backend     transpile framework + apps to the Node backend (e2e-build)
  *   run_app           boot the app headless, return page errors + a SCREENSHOT
  *   remove_app        delete a dev app from src/zz_dev/ again
  *   backend           start/stop/status of the express backend
  *
- * The intended agent loop: examples/capabilities -> deploy_app -> build_backend ->
- * run_app -> read the errors, LOOK at the screenshot -> edit -> repeat.
+ * The intended agent loop: examples/app_guide -> validate_view + screenshot_view
+ * (seconds, no system) -> deploy_app -> build_backend -> run_app -> read the
+ * errors, LOOK at the running app -> edit -> repeat.
+ *
+ * There are two ways to SEE a view here and they cost three orders of magnitude
+ * apart. screenshot_view photographs the RECONSTRUCTED view in the linter's
+ * render harness: seconds, no backend, no transpile, and it is blind to
+ * everything that only exists at runtime (data from a SELECT, what an event
+ * does). run_app boots the REAL app against the transpiled backend, which
+ * costs a build first. Reach for the cheap one while writing the view and the
+ * expensive one to prove the app.
  */
 import path from 'path';
 import fs from 'fs';
@@ -32,6 +43,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
 import { searchExamples, exampleSummary, catalogueFiles } from './lib/examples.mjs';
 import { searchPitfalls } from './lib/pitfalls.mjs';
+import { readGuide, sliceGuide, guideChapters, guideFile, GUIDE_PATH } from './lib/guide.mjs';
+import { parseSizes, screenshotSource } from './lib/screenshot.mjs';
 import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
 import {
   deployApp,
@@ -71,7 +84,7 @@ const TOOLS = [
     name: 'examples',
     description:
       'Find a WORKING APP that already does what you are about to build, across ALL THREE sample '
-      + 'repositories (~615 apps, live-parsed from their SAMPLES.md catalogues): abap2UI5/samples '
+      + 'repositories (614 apps, live-parsed from their SAMPLES.md catalogues): abap2UI5/samples '
       + '(patterns — value help, navigation, trees, tables), abap2UI5/samples-controls (the UI5 demo '
       + 'kit rebuilt control by control — ask this for "how do I express sap.m.Wizard") and '
       + 'abap2UI5/samples-stack (apps that need an OData service, RAP, APC or the launchpad — only '
@@ -80,7 +93,8 @@ const TOOLS = [
       + 'writing an app from scratch. What comes back is a repository, a class name and its path: '
       + 'READ that class. It is a whole app that compiles, renders and is downported to three '
       + 'releases, which is worth more than any snippet. A repository that is not checked out is '
-      + 'reported, not fatal — the others are still searched. Without arguments returns a summary.',
+      + 'reported, not fatal — the others are still searched. Entries also carry `docs`: the cookbook '
+      + 'pages that sample is the worked example of. Without arguments returns a summary.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -109,11 +123,41 @@ const TOOLS = [
     },
   },
   {
+    name: 'app_guide',
+    description:
+      'READ THIS BEFORE WRITING ABAP for an app of your own. The complete guide to BUILDING an '
+      + 'abap2UI5 app, live from the framework checkout (abap2UI5 docs/agents/building-apps.md, '
+      + 'written to be self-contained so no web access is needed): the app class template and its '
+      + 'lifecycle (check_on_init / check_on_event / check_on_navigated), the '
+      + 'z2ui5_cl_ui5_view_builder chain, data binding, events, popups, navigation, and the rules '
+      + 'that keep an app portable to the oldest supported UI5. Without arguments the whole guide '
+      + 'comes back, chapter by chapter — it is meant to be read once at the start of a task. '
+      + '`section` (a chapter number or a word from its heading) or `query` narrows it once you know '
+      + 'what you are looking for. This is the BUILD rulebook; `generation_rules` is the different '
+      + 'one for PORTING an existing UI5 demo-kit sample into the samples-controls corpus.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          description: 'one chapter: its number ("5") or a word from its heading ("events", "binding")',
+        },
+        query: {
+          type: 'string',
+          description: 'optional keywords — returns only the chapters carrying every term, e.g. "popup" or "value help"',
+        },
+      },
+    },
+  },
+  {
     name: 'generation_rules',
     description:
-      'The canonical rulebook for writing an abap2UI5 app with the generic view builder ' +
-      '(dispatcher skeleton, view/attribute idioms, binding and event rules). Read it once before ' +
-      'generating ABAP.',
+      'The rulebook for PORTING one official UI5 demo-kit sample to abap2UI5 as a '
+      + 'z2ui5_cl_smpc_app_<n> class in the samples-controls corpus: what to do with the original '
+      + 'Component.js/view.xml/controller, the corpus naming and file conventions, and the 1:1 '
+      + 'fidelity rules its gates enforce. Use it when you are porting a named demo-kit sample. '
+      + 'If you are building an app of your own, `app_guide` is the one you want — this document '
+      + 'assumes an input sample you do not have and a corpus you are not writing into.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -164,12 +208,14 @@ const TOOLS = [
     description:
       'Deploy an abap2UI5 app: writes <class_name>.clas.abap (+ abapGit sidecar) into the gitignored ' +
       'dev sandbox src/zz_dev/ and lints it with the repo abaplint config. The class must implement ' +
-      'z2ui5_if_app. After deploying, run build_backend once (rebuilds the transpiled Node backend), ' +
-      'then run_app to see it. Set lint:false to skip the lint (faster, not recommended).',
+      'z2ui5_if_app; ANY customer-namespace class name is accepted (zcl_my_app as much as ' +
+      'z2ui5_cl_my_app), so an app of your own keeps the name it has in your repository. After ' +
+      'deploying, run build_backend once (rebuilds the transpiled Node backend), then run_app to see ' +
+      'it. Set lint:false to skip the lint (faster, not recommended).',
     inputSchema: {
       type: 'object',
       properties: {
-        class_name: { type: 'string', description: 'lowercase class name matching ^z2ui5_cl_..., <= 30 chars, e.g. z2ui5_cl_my_app' },
+        class_name: { type: 'string', description: 'lowercase ABAP class name starting z or y, <= 30 chars, e.g. zcl_my_app or z2ui5_cl_my_app' },
         abap_source: { type: 'string', description: 'full ABAP source of the class (CLASS ... DEFINITION + IMPLEMENTATION)' },
         description: { type: 'string', description: 'short class description (abapGit DESCRIPT)' },
         lint: { type: 'boolean', description: 'run abaplint after writing (default true)' },
@@ -185,8 +231,11 @@ const TOOLS = [
       'deprecation) and renders it headless with a typed mock model. Seconds instead of a build+boot — use it ' +
       'after writing ABAP, then deploy_app once it is clean. Each finding carries severity (error = the app ' +
       'breaks, warning = not necessarily on your target UI5, hint = advisory), a message and the line/column ' +
-      'in the source you passed in; ok is false while any error or warning is left (hints are advisory). ' +
-      'The checked project\'s abap2ui5lint.jsonc (rule overrides, allow list, UI5 floor) is honoured; explicit arguments win.',
+      'in the source you passed in; ok is false while any error or warning is left (hints are advisory). Each rule ' +
+      'that fired also comes back explained under `rules` (pass explain:true for the full paragraph), so a finding ' +
+      'never needs a web search. The checked project\'s abap2ui5lint.jsonc (rule overrides, allow list, UI5 floor) ' +
+      'is honoured; explicit arguments win. Pair it with screenshot_view, which photographs the same reconstructed ' +
+      'view: this says whether the view is legal, that says what it looks like.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -202,6 +251,46 @@ const TOOLS = [
         min_ui5: { type: 'string', description: 'UI5 floor for the property gate (default 1.71)' },
         allow: { type: 'array', items: { type: 'string' }, description: 'accepted deviations, e.g. ["sap.m.GenericTile.systemInfo"]' },
         render: { type: 'boolean', description: 'run the headless render gate (default true)' },
+        explain: {
+          type: 'boolean',
+          description:
+            'add the full explanation of every rule that fired — why the defect matters and what the '
+            + 'fix looks like (default false; the one-line summary of each rule is always included)',
+        },
+      },
+    },
+  },
+  {
+    name: 'screenshot_view',
+    description:
+      'LOOK at the view your ABAP builds, in seconds and without a system, a build or a backend. '
+      + 'The view is reconstructed from the z2ui5_cl_ui5_view_builder calls (or taken as raw XML), '
+      + 'seeded with a model derived from the class\'s own TYPES/DATA, rendered against the local '
+      + 'OpenUI5 runtime and returned as an IMAGE. Use it while writing the view — beside '
+      + 'validate_view, which says whether the view is legal; this says what it looks like, which is '
+      + 'the half no finding can tell you (a control in the wrong aggregation, a layout that '
+      + 'collapses, a table that is empty). Ask for several viewports at once (`sizes`) — one '
+      + 'browser session renders them all, so a phone/desktop pair costs barely more than one '
+      + 'picture. What it cannot show: anything that only exists at runtime — rows a SELECT would '
+      + 'fetch (pass `model` for preview data), and whatever an event does. run_app is the '
+      + 'expensive tool that shows those, after a build.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        abap_source: { type: 'string', description: 'ABAP class source building its view with z2ui5_cl_ui5_view_builder' },
+        xml: { type: 'string', description: 'alternatively: raw view/fragment XML' },
+        sizes: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'viewports as WIDTHxHEIGHT, e.g. ["390x844", "1280x900"] (default one 1280x900)',
+        },
+        theme: { type: 'string', description: 'UI5 theme, e.g. sap_horizon (default) or sap_horizon_dark' },
+        model: {
+          type: 'object',
+          description:
+            'preview data merged over the derived model — the way to photograph a list with rows in '
+            + 'it, e.g. { "T_ITEMS": [{ "TEXT": "first" }, { "TEXT": "second" }] }',
+        },
       },
     },
   },
@@ -229,12 +318,14 @@ const TOOLS = [
     description:
       'Boot an app class headless in Chromium against the local backend (?app_start=<class>) and LOOK at it: ' +
       'returns booted/ok, real page errors + failed backend calls (benign UI5 noise filtered), and a full-page ' +
-      'screenshot as an image. The visual verification step of the loop — also works for the existing ports ' +
-      'and z2ui5_cl_smpc_app_overview.',
+      'screenshot as an image. The RUNNING app, so it is the only tool that sees what the ABAP does — the data ' +
+      'a SELECT fetched, what an event changes — and it needs a build_backend first. To look at the view alone ' +
+      'while writing it, screenshot_view answers in seconds with no build at all. Also works for the existing ' +
+      'ports and z2ui5_cl_smpc_app_overview.',
     inputSchema: {
       type: 'object',
       properties: {
-        class_name: { type: 'string', description: 'the app class to start, e.g. z2ui5_cl_my_app or z2ui5_cl_smpc_app_005' },
+        class_name: { type: 'string', description: 'the app class to start, e.g. zcl_my_app, z2ui5_cl_my_app or z2ui5_cl_smpc_app_005' },
         timeout_ms: { type: 'number', description: 'boot timeout in ms (default 60000)' },
       },
       required: ['class_name'],
@@ -326,6 +417,50 @@ function progressReporter({ progressToken, sendNotification }) {
   };
 }
 
+/*
+ * What the rules that fired actually MEAN, keyed by rule id.
+ *
+ * A finding is `{ type: 'binding-to-reference', message: <one terminal line> }`.
+ * The message has to fit a terminal, so the paragraph explaining why the defect
+ * matters and what the fix looks like lives elsewhere — until now, only on the
+ * published rules page, i.e. behind a web fetch an agent has to make mid-task
+ * and may not be able to make at all.
+ *
+ * Keyed by the DISTINCT ids rather than attached per finding: a run reports the
+ * same rule many times over, and the explanation is a property of the rule.
+ * Twelve findings of one type cost one paragraph, not twelve.
+ *
+ * `summary` (one line) always, `detail` only on request. That split is the
+ * whole size argument: a first run on an unfamiliar class can hit a dozen
+ * distinct rules, and a dozen paragraphs would crowd out the findings they are
+ * about — while a dozen one-line summaries is the table of contents an agent
+ * needs to decide which one it does not understand. `explain: true` then
+ * returns the paragraphs.
+ *
+ * Degrades to nothing at all. The linter is resolved as an UNPINNED sibling
+ * checkout, so `./rule-docs` may simply not be in an older one's exports map —
+ * that must cost the agent an explanation, never the findings.
+ */
+async function explainRules(findings, withDetail) {
+  const ids = [...new Set((findings || []).map((f) => f.type).filter(Boolean))];
+  if (!ids.length) return null;
+  let RULE_DOCS;
+  try {
+    ({ RULE_DOCS } = await importViewCheck('./rule-docs'));
+  } catch {
+    return null; // an older linter checkout: findings still stand on their own
+  }
+  const out = {};
+  for (const id of ids) {
+    const doc = RULE_DOCS && RULE_DOCS[id];
+    if (!doc) continue; // a rule newer than this checkout's prose
+    out[id] = withDetail
+      ? { summary: doc.summary, detail: doc.detail, ...(doc.example ? { example: doc.example } : {}) }
+      : { summary: doc.summary };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 async function handle(name, args = {}, ctx = {}) {
   switch (name) {
     case 'capabilities': {
@@ -373,6 +508,35 @@ async function handle(name, args = {}, ctx = {}) {
         entries: hits,
       });
     }
+    case 'app_guide': {
+      // the guide is maintained beside the framework sources, not in the corpus
+      const miss = missingSibling('abap2UI5');
+      if (miss) return miss;
+      const md = readGuide();
+      if (md === null) {
+        return toolError(`the abap2UI5 checkout has no ${GUIDE_PATH.join('/')} (looked in ${guideFile()}) — `
+          + 'update it (git pull); the app-building guide lives there');
+      }
+      const chapters = guideChapters(md);
+      const sections = sliceGuide(md, { section: args.section, query: args.query });
+      if (!sections.length) {
+        return text({
+          matches: 0,
+          chapters,
+          hint: `nothing in the guide matches ${args.section ? `section '${args.section}'` : ''}`
+            + `${args.section && args.query ? ' and ' : ''}${args.query ? `"${args.query}"` : ''}`
+            + ' — the chapters are listed above, or call it without arguments to read the whole guide',
+        });
+      }
+      return text({
+        source: 'abap2UI5/' + GUIDE_PATH.join('/'),
+        about: 'building an app WITH abap2UI5 (for porting a demo-kit sample, call generation_rules)',
+        chapters,
+        matches: sections.length,
+        sections,
+        next: 'write the class, then validate_view + screenshot_view — both answer in seconds, before any build',
+      });
+    }
     case 'generation_rules': {
       const miss = missingSibling('samples-controls');
       if (miss) return miss;
@@ -388,7 +552,8 @@ async function handle(name, args = {}, ctx = {}) {
       const rules = fs.readFileSync(p, 'utf8');
       return text(
         rules +
-          '\n\n---\nMore depth: AGENTS.md (conventions, gates), CAPABILITIES.md via the capabilities tool, ' +
+          '\n\n---\nThis is the PORTING brief. Building an app of your own instead? Call `app_guide`.\n' +
+          'More depth: AGENTS.md (conventions, gates), CAPABILITIES.md via the capabilities tool, ' +
           'and https://abap2ui5.github.io/docs/cookbook/overview for the cookbook.',
       );
     }
@@ -503,10 +668,12 @@ async function handle(name, args = {}, ctx = {}) {
       counts[result.renderSeverity || 'error'] += result.renderErrors.length;
       const failOn = opt.failOn || 'warning';
       const ok = failOn === 'never' || SEVERITIES.slice(severityRank(failOn)).every((s) => counts[s] === 0);
+      const rules = await explainRules(result.findings, args.explain === true);
       return text({
         ok,
         counts,
         findings: result.findings,
+        ...(rules ? { rules } : {}),
         renderErrors: result.renderErrors,
         reconstructedDocs: result.docs.length,
         skippedRender: result.skippedRender ? `view parts in helper methods (${result.helperTokens} calls) — not statically reconstructable` : undefined,
@@ -518,6 +685,65 @@ async function handle(name, args = {}, ctx = {}) {
             ? 'hints are advisory - an event without a handler is intended when the roundtrip alone is the point'
             : undefined,
       });
+    }
+    case 'screenshot_view': {
+      const miss = missingSibling('linter');
+      if (miss) return miss;
+      if (!args.abap_source && !args.xml) return toolError('pass abap_source or xml');
+      /* The linter's own `--screenshot` runtime, through the package exports
+       * map like every other call into it: same reconstruction the gate
+       * clears, same render harness, same theme compilation. Nothing about
+       * taking the picture is re-implemented here — this tool writes the
+       * source to a file, because that is the shape screenshotFiles takes. */
+      const lib = await importViewCheck('.');
+      if (typeof lib.screenshotFiles !== 'function') {
+        return toolError('this linter checkout has no screenshotFiles export — update it (git pull); '
+          + '--screenshot shipped after 0.2.1');
+      }
+      let sizes;
+      try {
+        sizes = parseSizes(args.sizes);
+      } catch (e) {
+        return toolError(String(e.message));
+      }
+      const shots = await screenshotSource({
+        screenshotFiles: lib.screenshotFiles,
+        abapSource: args.abap_source,
+        xml: args.xml,
+        sizes,
+        theme: args.theme,
+        model: args.model,
+      });
+
+      /* One entry per view per viewport. A class can build more than one
+       * document (a view and its popup fragment), and `index`/`kind` are what
+       * tell them apart - so the report names them rather than leaving the
+       * agent to guess which of three images is the popup. */
+      const report = shots.map((s) => ({
+        index: s.index,
+        kind: s.kind,
+        size: s.size ? `${s.size.width}x${s.size.height}` : undefined,
+        photographed: Boolean(s.png),
+        errors: s.errors && s.errors.length ? s.errors : undefined,
+      }));
+      const taken = shots.filter((s) => s.png);
+      const content = [{
+        type: 'text',
+        text: JSON.stringify({
+          images: taken.length,
+          views: report,
+          note: taken.length
+            ? 'the images below follow `views` in order; render errors do not suppress a picture — '
+              + 'the half that rendered is still worth looking at'
+            : undefined,
+          hint: taken.length ? undefined
+            : 'nothing could be photographed — a view built in helper methods is not statically '
+              + 'reconstructable (run_app sees it, after a build)',
+        }, null, 2),
+      }];
+      // the image blocks, the way run_app returns its screenshot
+      for (const s of taken) content.push({ type: 'image', data: s.png.toString('base64'), mimeType: 'image/png' });
+      return { content, isError: !taken.length };
     }
     case 'build_backend': {
       // the build pipeline lives in samples-controls; the abap2UI5 checkout is
