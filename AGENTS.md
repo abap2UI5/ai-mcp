@@ -192,11 +192,20 @@ legitimately slower.
   itself as "the canonical rulebook for writing an abap2UI5 app" while
   serving a document that opens "You are porting one official UI5 demo kit
   sample".
-- `lib/repos.mjs` exports **`VIEW_CHECK_DIRS`**: the checker's own directory
-  name `linter` plus the **pre-rename aliases** `abap2UI5-linter` and
-  `ai-view-check`, in that order. The VS Code extension mirrors the same list
-  by hand in `src/mcp.ts` and `src/viewcheck.ts` — change all three together,
-  and drop an alias only in a coordinated change across both repos.
+- **`lib/repo-dirs.json` is THE rename history of the ecosystem**, and this
+  repo owns it because this is the component that resolves the repos root.
+  Per repo it carries the directory names a checkout can carry (newest first —
+  `linter`, then the pre-rename aliases `abap2UI5-linter` and `ai-view-check`;
+  `samples-controls`, then `abap2UI5-api` and `ai-demokit`; and so on), the env
+  vars that override the guess, and the probe file that proves a candidate
+  really is that checkout. `lib/repos.mjs` reads it — the constants it still
+  exports (`VIEW_CHECK_DIRS`, `CORPUS_DIRS`, …) are views on the JSON, not
+  literals. **Add a name here and nowhere else.** The VS Code extension used to
+  keep a hand-written second copy in `src/repolayout.ts`; it now snapshots this
+  file into `src/data/repo-dirs.json` with a weekly drift gate
+  (`npm run repo-dirs:check`, `bump-repo-dirs.yml`), so a rename lands in one
+  place and propagates. Dropping an alias still un-finds somebody's working
+  checkout — do that only deliberately.
 - The README's setup section and the sibling-layout table above must stay in
   sync — the README is the user-facing copy, this file is the contract.
 
