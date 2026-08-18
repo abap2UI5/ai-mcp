@@ -644,8 +644,11 @@ test('a scaffold class name is an ABAP class name, or it is refused', () => {
 
 test('scaffolding renames the class in the ABAP, the sidecar and the file name', (t) => {
   const root = path.join(ROOT, '..', 'app-template');
-  if (!fs.existsSync(path.join(root, 'abaplint.jsonc'))) {
-    t.skip('app-template sibling not found');
+  // template.json, not abaplint.jsonc: the file list and the substitutions
+  // moved into it, so it is what scaffold() actually needs. A checkout that
+  // predates it is a sibling that is present and still cannot serve this test.
+  if (!fs.existsSync(path.join(root, 'template.json'))) {
+    t.skip('app-template sibling has no template.json');
     return;
   }
   const { files, missing } = scaffold(root, {
@@ -671,8 +674,11 @@ test('scaffolding renames the class in the ABAP, the sidecar and the file name',
 
 test('scaffolding without a class name returns the template as it stands', (t) => {
   const root = path.join(ROOT, '..', 'app-template');
-  if (!fs.existsSync(path.join(root, 'abaplint.jsonc'))) {
-    t.skip('app-template sibling not found');
+  // template.json, not abaplint.jsonc: the file list and the substitutions
+  // moved into it, so it is what scaffold() actually needs. A checkout that
+  // predates it is a sibling that is present and still cannot serve this test.
+  if (!fs.existsSync(path.join(root, 'template.json'))) {
+    t.skip('app-template sibling has no template.json');
     return;
   }
   const { files } = scaffold(root, {});
@@ -688,7 +694,7 @@ test('a template missing a file reports it rather than shipping a shorter projec
   // fails there for a reason that has nothing to do with the code.
   const specFile = path.join(ROOT, '..', 'app-template', 'template.json');
   if (!fs.existsSync(specFile)) {
-    t.skip('app-template sibling not found');
+    t.skip('app-template sibling has no template.json');
     return;
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-tpl-'));
