@@ -1,6 +1,6 @@
 # Releasing
 
-One tag publishes one package: **`@abap2ui5/mcp`** on the public npm
+One tag publishes one package: **`@abap2ui5/mcp-server`** on the public npm
 registry. Everything mechanical lives in
 [`.github/workflows/release.yml`](.github/workflows/release.yml); its header
 comment is the reference. This file is the human checklist.
@@ -11,7 +11,7 @@ Merging to `main` is the release for everyone reading the repository. npm is
 the one channel that needs a deliberate, immutable version, and this server
 needs it more than most: its **tool names and result shapes are a contract**
 with every agent configuration that registers it. `npx --yes
-github:abap2UI5/ai-mcp` resolves to whatever `main` holds that day, so an
+github:abap2UI5/mcp-server` resolves to whatever `main` holds that day, so an
 agent setup that worked on Monday can behave differently on Tuesday without
 anyone having decided that.
 
@@ -22,7 +22,7 @@ to the first 72 hours and, for a package others depend on, is worse than the
 bug it would remove.
 
 The everyday correction is a new version. What genuinely cannot be taken back
-is the **package name** — `@abap2ui5/mcp` — so that is the one thing worth
+is the **package name** — `@abap2ui5/mcp-server` — so that is the one thing worth
 getting right the first time.
 
 ## One-time setup — what a maintainer still has to do by hand
@@ -45,7 +45,7 @@ npm publish --access public
 supported CI and aborts anywhere else. The bootstrap version ships without it;
 every release the workflow cuts has it.)
 
-Then, on npmjs.com → `@abap2ui5/mcp` → **Settings → Trusted Publisher**, point
+Then, on npmjs.com → `@abap2ui5/mcp-server` → **Settings → Trusted Publisher**, point
 it at this repository and `release.yml`. From the second release on the
 workflow publishes with no token at all.
 
@@ -53,9 +53,9 @@ Two things follow the first publish, in other repositories, and neither is
 automatic:
 
 - the [VS Code extension](https://github.com/abap2UI5/vscode-extension)
-  registers this server as `npx --yes github:abap2UI5/ai-mcp` — the whole
+  registers this server as `npx --yes github:abap2UI5/mcp-server` — the whole
   reason for publishing is that this resolves to whatever `main` holds that
-  day, so it should become `npx --yes @abap2ui5/mcp@<version>`;
+  day, so it should become `npx --yes @abap2ui5/mcp-server@<version>`;
 - the README's setup section still tells everyone to `git clone` this
   repository, which stops being necessary for the tools that need no corpus.
 
@@ -109,7 +109,7 @@ Done once, by hand, before there was anything on npm — repeat it if
 
 One thing worth knowing before the first `npm publish`: **the install is
 ~45 MB**, and 19 MB of that is `playwright` + `playwright-core`, which only
-`run_app` uses (via a dynamic import). `npx --yes @abap2ui5/mcp` therefore
+`run_app` uses (via a dynamic import). `npx --yes @abap2ui5/mcp-server` therefore
 pays for a browser driver before it validates a single view. Marking the
 dependency `optional` would not help — npm installs optional dependencies by
 default — so the fix is the shape `@abap2ui5/linter` arrived at: a separate
@@ -132,9 +132,9 @@ after the tag. Worth remembering before cutting one.
 ## After a release
 
 - The [VS Code extension](https://github.com/abap2UI5/vscode-extension)
-  registers this server via `npx --yes github:abap2UI5/ai-mcp` today. Once a
-  version is on npm it should point at `@abap2ui5/mcp` instead, which is a
+  registers this server via `npx --yes github:abap2UI5/mcp-server` today. Once a
+  version is on npm it should point at `@abap2ui5/mcp-server` instead, which is a
   change in that repository.
 - The README's setup section names checkouts. A published package makes
-  `npx @abap2ui5/mcp` possible for the tools that need no corpus — worth
+  `npx @abap2ui5/mcp-server` possible for the tools that need no corpus — worth
   updating there when the first version lands.

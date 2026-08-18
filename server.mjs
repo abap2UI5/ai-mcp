@@ -5,7 +5,7 @@
  *
  * Speaks MCP over stdio. Register it in any MCP client, e.g. Claude Code:
  *
- *   claude mcp add abap2ui5 -- node ai-mcp/server.mjs
+ *   claude mcp add abap2ui5 -- node mcp-server/server.mjs
  *
  * Tools (each wraps infrastructure this repo already trusts in CI):
  *   capabilities      what abap2UI5 can express (CAPABILITIES.md, live-parsed)
@@ -407,23 +407,23 @@ function toolError(message) {
 const SIBLING_REPOS = {
   'samples-controls': {
     resolve: resolveSamplesControls,
-    hint: 'clone https://github.com/abap2UI5/samples-controls as a sibling of ai-mcp, or point SAMPLES_CONTROLS_HOME at an existing checkout (AI_DEMOKIT_HOME, its former name, is still read)',
+    hint: 'clone https://github.com/abap2UI5/samples-controls as a sibling of mcp-server, or point SAMPLES_CONTROLS_HOME at an existing checkout (AI_DEMOKIT_HOME, its former name, is still read)',
   },
   abap2UI5: {
     resolve: resolveA2UI5,
-    hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of ai-mcp (or run `npm run node:setup` in samples-controls), or point A2UI5_HOME at an existing checkout',
+    hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of mcp-server (or run `npm run node:setup` in samples-controls), or point A2UI5_HOME at an existing checkout',
   },
   samples: {
     resolve: resolveSamples,
-    hint: 'clone https://github.com/abap2UI5/samples as a sibling of ai-mcp, or point SAMPLES_HOME at an existing checkout',
+    hint: 'clone https://github.com/abap2UI5/samples as a sibling of mcp-server, or point SAMPLES_HOME at an existing checkout',
   },
   linter: {
     resolve: resolveViewCheck,
-    hint: 'clone https://github.com/abap2UI5/linter as a sibling of ai-mcp, or point AI_VIEW_CHECK_HOME at an existing checkout',
+    hint: 'clone https://github.com/abap2UI5/linter as a sibling of mcp-server, or point AI_VIEW_CHECK_HOME at an existing checkout',
   },
   'app-template': {
     resolve: resolveAppTemplate,
-    hint: 'clone https://github.com/abap2UI5/app-template as a sibling of ai-mcp, or point APP_TEMPLATE_HOME at an existing checkout',
+    hint: 'clone https://github.com/abap2UI5/app-template as a sibling of mcp-server, or point APP_TEMPLATE_HOME at an existing checkout',
   },
 };
 
@@ -526,7 +526,7 @@ async function handle(name, args = {}, ctx = {}) {
       const { found, missing } = catalogueFiles();
       if (!found.length) {
         return toolError(
-          'no sample catalogue found — clone at least one of them as a sibling of ai-mcp:\n'
+          'no sample catalogue found — clone at least one of them as a sibling of mcp-server:\n'
           + missing.map((m) => `  ${m.repo}: ${m.why}`).join('\n'),
         );
       }

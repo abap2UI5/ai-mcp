@@ -1,8 +1,8 @@
 name: Publish to npm
-# Publishes @abap2ui5/mcp to the public npm registry from one version tag.
+# Publishes @abap2ui5/mcp-server to the public npm registry from one version tag.
 #
 # Why this exists: the server was installable only as `npx --yes
-# github:abap2UI5/ai-mcp`, which resolves to whatever main happens to hold.
+# github:abap2UI5/mcp-server`, which resolves to whatever main happens to hold.
 # For a server whose tool NAMES and result SHAPES are a contract with every
 # agent setup that registers it, "whatever main holds" is the wrong contract -
 # an agent's config keeps working or stops working depending on the day.
@@ -135,7 +135,7 @@ jobs:
               const list = msgs.find((m) => m.id === 2);
               const call = msgs.find((m) => m.id === 3);
               expect(init && init.result.serverInfo.name === "abap2ui5", "the installed server starts and identifies itself");
-              expect(init.result.serverInfo.version === require("./node_modules/@abap2ui5/mcp/package.json").version, "it serves the packaged version");
+              expect(init.result.serverInfo.version === require("./node_modules/@abap2ui5/mcp-server/package.json").version, "it serves the packaged version");
               expect(list && list.result.tools.length > 0, "tools/list answers from the tarball (lib/ came along)");
               expect(call && call.result.isError && /checkout not found/.test(call.result.content[0].text),
                 "a missing checkout is an actionable message, not a crash");

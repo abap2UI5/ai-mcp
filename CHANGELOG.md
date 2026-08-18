@@ -2,9 +2,22 @@
 
 ## Unreleased
 
-Nothing published yet — `@abap2ui5/mcp` has never been on npm. Everything
+Nothing published yet — `@abap2ui5/mcp-server` has never been on npm. Everything
 below is what the first version will carry, and what changed since the server
-was only installable as `npx --yes github:abap2UI5/ai-mcp`.
+was only installable as `npx --yes github:abap2UI5/mcp-server`.
+
+- **Renamed: the repository is `mcp-server`, the package is `@abap2ui5/mcp-server`.**
+  `mcp` names a protocol; `mcp-server` names the thing, which is what somebody
+  scanning the organisation's repository list needs to read without clicking.
+  The rename happened before the first publish on purpose: a package name is
+  the one thing a release cannot take back, and a repository whose name differs
+  from its only package is a discrepancy nobody has to inherit.
+
+  `lib/repo-dirs.json` — the ecosystem's rename history — now carries an entry
+  for this server itself, listing `mcp-server` and `ai-mcp`. It resolves
+  nothing for its own sake, but a consumer that looks for a local checkout by
+  directory name (abap2UI5/vscode-extension does, before falling back to npx)
+  would otherwise miss one carrying the previous name.
 
 - **`scaffold_app`: the files a new project starts from.** The server could
   tell an agent how to write a class (`app_guide`) and where to put one so it
