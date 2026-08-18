@@ -1,4 +1,4 @@
-# AGENTS.md — ai-mcp
+# AGENTS.md — mcp-server
 
 Single source of truth for agents working on the **abap2UI5 MCP server** —
 the `app_guide → validate_view/screenshot_view → deploy_app → build_backend →
@@ -24,7 +24,7 @@ is what an agent's feedback loop is made of.
 
 ## The one thing to understand first: this repo cannot work alone
 
-ai-mcp **bundles no content**. Every tool reads live from sibling checkouts,
+mcp-server **bundles no content**. Every tool reads live from sibling checkouts,
 resolved per call in `lib/repos.mjs` (explicit env var, then the `../<name>`
 sibling of this repo — plus, for abap2UI5, the in-repo `.abap2UI5` clone that
 samples-controls' `npm run node:setup` creates). A **set env var is
@@ -64,7 +64,7 @@ It answers from what it can read, names what it could not under
 
 ### The compatibility surface — renames upstream break tools here silently
 
-These upstream file names/shapes are load-bearing for ai-mcp. When one
+These upstream file names/shapes are load-bearing for mcp-server. When one
 changes upstream, this repo must change in the same breath:
 
 - samples, samples-controls, samples-stack: the `SAMPLES.md` **row shape** —
@@ -114,7 +114,7 @@ changes upstream, this repo must change in the same breath:
 ## Side effects on sibling repos — expected, not a bug
 
 The server **writes into the sibling checkouts**. When you (or another
-agent) find these artifacts in a dirty sibling worktree, ai-mcp caused them:
+agent) find these artifacts in a dirty sibling worktree, mcp-server caused them:
 
 - `<samples-controls>/.abaplint-mcp-dev.jsonc` — patched lint config for deployed
   dev apps (gitignored there).

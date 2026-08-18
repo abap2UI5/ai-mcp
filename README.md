@@ -1,4 +1,4 @@
-# ai-mcp
+# mcp-server
 
 **The MCP server for abap2UI5** — gives any AI coding agent (Claude Code,
 Cursor, VS Code Copilot, or any MCP client) the full abap2UI5 development
@@ -39,8 +39,8 @@ in the linter checkout. `validate_view`'s property gate needs neither.)
 
 ```sh
 git clone https://github.com/abap2UI5/linter   # AI_VIEW_CHECK_HOME
-git clone https://github.com/abap2UI5/ai-mcp
-cd linter && npm ci && cd ../ai-mcp && npm ci
+git clone https://github.com/abap2UI5/mcp-server
+cd linter && npm ci && cd ../mcp-server && npm ci
 ```
 
 The other tools answer with an actionable message naming what is missing
@@ -98,7 +98,7 @@ it is what buys an agent the ability to look at what it built.
 **Claude Code:**
 
 ```sh
-claude mcp add abap2ui5 -- node /path/to/ai-mcp/server.mjs
+claude mcp add abap2ui5 -- node /path/to/mcp-server/server.mjs
 ```
 
 **Cursor** (`.cursor/mcp.json`), **VS Code** (`.vscode/mcp.json`), **Claude
@@ -110,7 +110,7 @@ standard stdio shape:
   "mcpServers": {
     "abap2ui5": {
       "command": "node",
-      "args": ["/path/to/ai-mcp/server.mjs"],
+      "args": ["/path/to/mcp-server/server.mjs"],
       "env": {
         "AI_VIEW_CHECK_HOME": "/path/to/linter",
         "A2UI5_HOME": "/path/to/abap2UI5",
@@ -122,7 +122,7 @@ standard stdio shape:
 ```
 
 The three `env` entries are only needed if the checkouts are not siblings of
-`ai-mcp`; drop the ones you stopped short of. VS Code wants the same object
+`mcp-server`; drop the ones you stopped short of. VS Code wants the same object
 under a top-level `"servers"` key rather than `"mcpServers"`.
 
 The [abap2UI5 VS Code extension](https://github.com/abap2UI5/vscode-extension)
