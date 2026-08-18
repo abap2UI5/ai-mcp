@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
 
 Nothing published yet — `@abap2ui5/mcp-server` has never been on npm. Everything
 below is what the first version will carry, and what changed since the server
