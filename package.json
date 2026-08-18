@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
+    "check": "npm test",
     "test": "node --test \"test/*.test.mjs\""
   },
   "repository": {

@@ -39,9 +39,22 @@ in the linter checkout. `validate_view`'s property gate needs neither.)
 
 ```sh
 git clone https://github.com/abap2UI5/linter   # AI_VIEW_CHECK_HOME
-git clone https://github.com/abap2UI5/mcp-server
-cd linter && npm ci && cd ../mcp-server && npm ci
+cd linter && npm ci
 ```
+
+The server itself is on npm, so it needs no checkout — `npx --yes
+@abap2ui5/mcp-server` in the command below fetches and runs it. Clone it too
+only if you want to work ON the server:
+
+```sh
+git clone https://github.com/abap2UI5/mcp-server && cd mcp-server && npm ci
+```
+
+(The npx install is ~45 MB, and 19 MB of that is the Playwright driver that
+only `run_app` imports — it is paid before the first view is validated. Moving
+the browser out into an optional peer package is [open
+work](https://github.com/abap2UI5/mcp-server/blob/main/RELEASING.md); a local
+checkout has the same cost.)
 
 The other tools answer with an actionable message naming what is missing
 rather than failing — the server starts either way.
@@ -98,8 +111,10 @@ it is what buys an agent the ability to look at what it built.
 **Claude Code:**
 
 ```sh
-claude mcp add abap2ui5 -- node /path/to/mcp-server/server.mjs
+claude mcp add abap2ui5 -- npx --yes @abap2ui5/mcp-server
 ```
+
+or, from a checkout, `claude mcp add abap2ui5 -- node /path/to/mcp-server/server.mjs`.
 
 **Cursor** (`.cursor/mcp.json`), **VS Code** (`.vscode/mcp.json`), **Claude
 Desktop** (`claude_desktop_config.json`) and anything else that reads the
@@ -109,8 +124,8 @@ standard stdio shape:
 {
   "mcpServers": {
     "abap2ui5": {
-      "command": "node",
-      "args": ["/path/to/mcp-server/server.mjs"],
+      "command": "npx",
+      "args": ["--yes", "@abap2ui5/mcp-server"],
       "env": {
         "AI_VIEW_CHECK_HOME": "/path/to/linter",
         "A2UI5_HOME": "/path/to/abap2UI5",
@@ -121,8 +136,12 @@ standard stdio shape:
 }
 ```
 
+To run a checkout instead, swap those two lines for `"command": "node"` and
+`"args": ["/path/to/mcp-server/server.mjs"]`.
+
 The three `env` entries are only needed if the checkouts are not siblings of
-`mcp-server`; drop the ones you stopped short of. VS Code wants the same object
+the server — which they cannot be when it runs from npx, so state them there;
+drop the ones you stopped short of. VS Code wants the same object
 under a top-level `"servers"` key rather than `"mcpServers"`.
 
 The [abap2UI5 VS Code extension](https://github.com/abap2UI5/vscode-extension)

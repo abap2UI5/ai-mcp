@@ -131,10 +131,12 @@ after the tag. Worth remembering before cutting one.
 
 ## After a release
 
+Both of these were done when 0.1.0 landed; they are here as the checklist for
+the release after a **rename**, which is when they come back:
+
 - The [VS Code extension](https://github.com/abap2UI5/vscode-extension)
-  registers this server via `npx --yes github:abap2UI5/mcp-server` today. Once a
-  version is on npm it should point at `@abap2ui5/mcp-server` instead, which is a
-  change in that repository.
-- The README's setup section names checkouts. A published package makes
-  `npx @abap2ui5/mcp-server` possible for the tools that need no corpus — worth
-  updating there when the first version lands.
+  registers this server via `npx --yes @abap2ui5/mcp-server` — unpinned, because
+  the server's compatibility is with the corpora it reads and not with that
+  extension. A rename of this package is a change in that repository.
+- The README's setup section leads with `npx @abap2ui5/mcp-server` and mentions
+  a checkout only for working on the server itself.
