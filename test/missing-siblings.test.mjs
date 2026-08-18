@@ -27,6 +27,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
       SAMPLES_STACK_HOME: path.join(NOWHERE, 'samples-stack'),
       A2UI5_HOME: path.join(NOWHERE, 'abap2UI5'),
       AI_VIEW_CHECK_HOME: path.join(NOWHERE, 'linter'),
+      APP_TEMPLATE_HOME: path.join(NOWHERE, 'app-template'),
     },
   });
   let buf = '';
@@ -84,7 +85,8 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     const list = await until((m) => m.id === 2);
     assert.deepEqual(
       list.result.tools.map((t) => t.name).sort(),
-      ['backend', 'build_backend', 'capabilities', 'deploy_app', 'examples', 'generation_rules', 'pitfalls', 'remove_app', 'run_app', 'scope_of', 'validate_view'],
+      ['app_guide', 'backend', 'build_backend', 'capabilities', 'deploy_app', 'examples', 'generation_rules',
+        'pitfalls', 'remove_app', 'run_app', 'scaffold_app', 'scope_of', 'screenshot_view', 'validate_view'],
     );
 
     // samples-controls-backed tools
@@ -92,6 +94,9 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     expectMissing(await call('capabilities', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('capabilities', { query: 'popup' }), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(await call('generation_rules', {}), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    // the starter project comes from a repository of its own
+    expectMissing(await call('scaffold_app', {}), /app-template/, 'APP_TEMPLATE_HOME');
+    expectMissing(await call('scaffold_app', { class: 'zcl_my_app' }), /app-template/, 'APP_TEMPLATE_HOME');
     expectMissing(await call('scope_of', { entities: ['sap.m.Wizard'] }), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissing(
       await call('deploy_app', { class_name: 'z2ui5_cl_demo', abap_source: 'CLASS z2ui5_cl_demo DEFINITION. INTERFACES z2ui5_if_app.' }),
@@ -117,9 +122,15 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
       assert.match(t, /SAMPLES_STACK_HOME/, `must name the stack env var: ${t}`);
     }
 
-    // linter-backed tool
+    // linter-backed tools: the verdict and the picture come from the same
+    // checkout, so both have to degrade the same way
     expectMissing(
       await call('validate_view', { xml: '<mvc:View xmlns:mvc="sap.ui.core.mvc"/>' }),
+      /linter checkout not found/,
+      'AI_VIEW_CHECK_HOME',
+    );
+    expectMissing(
+      await call('screenshot_view', { xml: '<mvc:View xmlns:mvc="sap.ui.core.mvc"/>' }),
       /linter checkout not found/,
       'AI_VIEW_CHECK_HOME',
     );
@@ -129,6 +140,9 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     // the pitfalls catalogues live in the abap2UI5 checkout, not in the corpus
     expectMissing(await call('pitfalls', {}), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('pitfalls', { area: 'view' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    // and so does the app-building guide - it is maintained beside the sources
+    expectMissing(await call('app_guide', {}), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissing(await call('app_guide', { section: '5' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'start' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'restart' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
 

@@ -5,14 +5,17 @@ Cursor, VS Code Copilot, or any MCP client) the full abap2UI5 development
 loop, without an SAP system:
 
 ```
-examples -> capabilities -> validate_view -> deploy_app -> build_backend -> run_app -> pitfalls
-(has somebody   (what can        (static gates:     (write ABAP,    (transpile       (boot headless,    (what a green
- built it       I express?)       props + render)    lint)           to Node)         errors +           run still
- already?)                                                                            SCREENSHOT)        does not prove)
+examples -> app_guide -> validate_view + screenshot_view -> deploy_app -> build_backend -> run_app -> pitfalls
+(has somebody  (how an app  (SECONDS, no system:        (write ABAP,  (transpile      (boot headless,  (what a green
+ built it       is built)    is the view legal,          lint)         to Node)        errors +         run still
+ already?)                   and what does it LOOK like)                               SCREENSHOT)      does not prove)
 ```
 
-The agent writes an ABAP class, validates the view in seconds, deploys it,
-boots it in a real browser and **looks at the screenshot** — then iterates.
+The agent writes an ABAP class, validates the view **and looks at a picture of
+it** in seconds, deploys it, boots it in a real browser and looks at the
+running app — then iterates. The two ways of seeing it cost three orders of
+magnitude apart: `screenshot_view` renders the reconstructed view with no
+backend at all, `run_app` boots the transpiled app and needs a build first.
 Everything runs locally on infrastructure that already guards the abap2UI5
 ecosystem in CI: the abaplint transpiler + open-abap runtime, the framework's
 express shim, the [samples-controls](https://github.com/abap2UI5/samples-controls) build
@@ -24,10 +27,15 @@ validation core.
 The tools need different things, so you can stop at the level you need. Each
 step adds the ones below it.
 
-### Level 1 — validate views (~3 MB, a minute)
+### Level 1 — validate and SEE views (~3 MB, a minute)
 
-`validate_view` alone, which is the tool you reach for most: it reconstructs
-the view your ABAP builds and checks it against the UI5 API.
+`validate_view` and `screenshot_view`, the two tools you reach for most: they
+reconstruct the view your ABAP builds, check it against the UI5 API and
+photograph it. No SAP system, no backend, no transpile — seconds per answer.
+
+(`screenshot_view` additionally needs the linter's render runtime and a
+browser: `npm i -D @abap2ui5/render-runtime && npx playwright install chromium`
+in the linter checkout. `validate_view`'s property gate needs neither.)
 
 ```sh
 git clone https://github.com/abap2UI5/linter   # AI_VIEW_CHECK_HOME
@@ -40,7 +48,8 @@ rather than failing — the server starts either way.
 
 ### Level 2 — the catalogues and deploying (~110 MB)
 
-`examples`, `capabilities`, `generation_rules`, `pitfalls`, `scope_of`, `deploy_app`.
+`examples`, `capabilities`, `app_guide`, `scaffold_app`, `generation_rules`,
+`pitfalls`, `scope_of`, `deploy_app`.
 
 ```sh
 git clone https://github.com/abap2UI5/abap2UI5          # A2UI5_HOME
@@ -58,7 +67,7 @@ and hands back a class to read rather than a snippet to trust.
 | repository | what it answers |
 |---|---|
 | `samples` (152) | the patterns, on a bare abap2UI5 install |
-| `samples-controls` (431) | how a specific UI5 **control** is expressed — the demo kit, rebuilt |
+| `samples-controls` (430) | how a specific UI5 **control** is expressed — the demo kit, rebuilt |
 | `samples-stack` (32) | the same, for apps that need OData, RAP, APC or the launchpad |
 
 Any one of the three is enough to start: a missing clone is reported in the
@@ -125,13 +134,16 @@ that need a real SAP system.
 | Tool | What it does |
 |---|---|
 | `capabilities` | Query the verified capability map (samples-controls CAPABILITIES.md, parsed live — no drift). Ask before assuming a UI5 feature is impossible: `{ query: "tree binding" }`, `{ status: "not-expressible" }` |
-| `generation_rules` | The rulebook for writing an app with the generic view builder |
+| `app_guide` | **How to build an app**, live from the framework checkout (abap2UI5 `docs/agents/building-apps.md`): app class template, lifecycle, the view-builder chain, binding, events, popups, navigation, portability. Whole guide by default; `{ section: "5" }` or `{ query: "popup" }` narrows it |
+| `scaffold_app` | **The files a new project starts from**, live from abap2UI5/app-template: both gate configs with the framework pinned, the CI workflow, the abapGit metadata, an `AGENTS.md` briefing and a working app class with its sidecar. `{ class: "zcl_my_app" }` renames it throughout — the ABAP, the sidecar's `CLSNAME` and the file names, which is the part that decides whether the object activates. Returns files to write; writes nothing itself |
+| `generation_rules` | The rulebook for **porting a UI5 demo-kit sample** into the samples-controls corpus. A different job from `app_guide` — it assumes an input sample and the corpus' naming |
 | `pitfalls` | The catalogues of defects **a green CI does not catch**, parsed live from the abap2UI5 checkout: `{ area: "abap" }` (abapGit round trip and import, activation, extended check, downport/transpiler, runtime) and `{ area: "view" }` (names the 1.71 floor does not have, layout that only works on a newer release, views that fail to *load*). Every entry is a defect that actually shipped, with its evidence. `validate_view` decides what a rule can decide — this is the rest |
 | `scope_of` | In/out-of-scope verdict for UI5 controls (since <= 1.71, not deprecated) |
-| `validate_view` | **Seconds, not minutes**: static property gate + headless render via abap2UI5-linter, from ABAP source or raw XML — run this after writing, before deploying. Findings come with a severity, a message and the line/column in the source you passed in. Judged by your project's own `abap2ui5lint.jsonc`: pass `{ project_dir: "/path/to/your/repo" }`, or let it take the directory the server runs in |
-| `deploy_app` | Write `<class>.clas.abap` + abapGit sidecar into the gitignored sandbox `src/zz_dev/` (in the samples-controls checkout), then abaplint it |
+| `validate_view` | **Seconds, not minutes**: static property gate + headless render via abap2UI5-linter, from ABAP source or raw XML — run this after writing, before deploying. Findings come with a severity, a message and the line/column in the source you passed in, plus what each rule that fired MEANS (`explain: true` for the full paragraph) — no web search to interpret a finding. Judged by your project's own `abap2ui5lint.jsonc`: pass `{ project_dir: "/path/to/your/repo" }`, or let it take the directory the server runs in |
+| `deploy_app` | Write `<class>.clas.abap` + abapGit sidecar into the gitignored sandbox `src/zz_dev/` (in the samples-controls checkout), then abaplint it. Any customer-namespace class name — `zcl_my_app` as much as `z2ui5_cl_my_app` |
 | `build_backend` | Rebuild the transpiled Node backend. `mode: auto` is **incremental** after the first full build (~1-2 min per iteration); `mode: full` runs the complete e2e-build |
-| `run_app` | Boot any app class headless (`?app_start=<class>`), return boot status, real page errors (benign UI5 noise filtered) and a full-page **screenshot as an image** |
+| `screenshot_view` | **See the view in seconds**, from source, with no build and no backend: reconstructed, rendered against the local OpenUI5 runtime and returned as an image. Several viewports in one session (`{ sizes: ["390x844", "1280x900"] }`), any theme, and `model` for preview data. What it cannot show is anything that only exists at runtime — that is `run_app` |
+| `run_app` | Boot any app class headless (`?app_start=<class>`), return boot status, real page errors (benign UI5 noise filtered) and a full-page **screenshot as an image**. The RUNNING app, so it needs a `build_backend` first |
 | `backend` | `status` / `start` / `stop` / `restart` of the local express backend |
 | `remove_app` | Delete a dev app from the sandbox (or list the deployed ones) |
 
@@ -143,13 +155,18 @@ existing port, look at it, then build mine".
 
 1. `capabilities { query: ... }` — check the feature is expressible (and how)
    before writing a line of ABAP.
-2. `generation_rules` — once per session.
-3. Write the class, `validate_view` — fix findings in seconds.
-4. `deploy_app` — abaplint against the full framework context.
-5. `build_backend` — incremental after the first full build.
-6. `run_app` — read the errors, **look at the screenshot**. Edit, validate,
+2. `app_guide` — once per session, before writing any ABAP. (`generation_rules`
+   instead, if the job is porting a named demo-kit sample.)
+3. `scaffold_app` — when the user wants a project of their own, not a class to
+   paste into one that exists.
+4. Write the class, then `validate_view` **and** `screenshot_view` — the
+   findings and the picture, both in seconds and neither needing a build. Most
+   iterations should end here.
+5. `deploy_app` — abaplint against the full framework context.
+6. `build_backend` — incremental after the first full build.
+7. `run_app` — read the errors, **look at the screenshot**. Edit, validate,
    deploy, build, run again.
-7. `pitfalls` before you call it done — the defects no gate here can see: what
+8. `pitfalls` before you call it done — the defects no gate here can see: what
    the class does on a *real* system (abapGit import, activation, the extended
    check) and what the view does on the *oldest* one. A green loop is not the
    same as a shipped app.

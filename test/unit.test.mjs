@@ -8,6 +8,9 @@ import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
 import { parseExamples, searchExamples, CATALOGUES } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
+import { sliceGuide, guideChapters } from '../lib/guide.mjs';
+import { parseSizes } from '../lib/screenshot.mjs';
+import { scaffold, validClassName, TEMPLATE_FILES } from '../lib/scaffold.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -142,11 +145,33 @@ test('the live parsers report, never throw, on a damaged document', () => {
 // error paths are sibling-free. (The happy path writes into ai-demokit and
 // is covered by the stdio smoke instead.)
 
-test('deployApp rejects a class name outside the z2ui5_cl_ namespace', () => {
-  assert.throws(
-    () => deployApp({ className: 'zcl_my_app', source: 'x' }),
-    /invalid class name/,
-  );
+test('deployApp rejects a class name outside the customer namespace', () => {
+  for (const bad of ['acl_my_app', 'cl_my_app', 'my_app', '1cl_app', '']) {
+    assert.throws(
+      () => deployApp({ className: bad, source: 'x' }),
+      /invalid class name/,
+      `expected rejection for '${bad}'`,
+    );
+  }
+});
+
+/* The namespace this accepts is the CUSTOMER namespace, not the corpus' port
+ * convention. It was `^z2ui5_cl_`, which is what the demo-kit ports are called
+ * - and this server exists for an agent building its own app. abap2UI5's own
+ * app-template ships `zcl_app_001`, so the recommended starting point was the
+ * one name every tool here refused. */
+test('deployApp accepts the customer-namespace names a user app actually has', () => {
+  const source = (cls) => `CLASS ${cls} DEFINITION. INTERFACES z2ui5_if_app. ENDCLASS.`;
+  for (const good of ['zcl_app_001', 'ycl_app', 'z2ui5_cl_my_app', 'zcx_error']) {
+    // it gets past validation - what stops it here is the missing corpus
+    // checkout it would write into, which is a different error entirely
+    assert.doesNotThrow(
+      () => { try { deployApp({ className: good, source: source(good) }); } catch (e) {
+        if (/invalid class name/.test(e.message)) throw e;
+      } },
+      `expected '${good}' to pass the name gate`,
+    );
+  }
 });
 
 test('deployApp rejects an over-long class name', () => {
@@ -188,8 +213,24 @@ test('removeApp rejects a name that would escape the dev sandbox', () => {
 });
 
 test('removeApp rejects the same names deployApp does', () => {
-  for (const bad of ['zcl_my_app', 'z2ui5_cl_' + 'a'.repeat(30), '', 'z2ui5_cl_a/b']) {
+  for (const bad of ['acl_my_app', 'z2ui5_cl_' + 'a'.repeat(30), '', 'z2ui5_cl_a/b', 'zcl_a.b', 'zcl_a\\b', 'zcl a']) {
     assert.throws(() => removeApp(bad), /invalid class name/, `expected rejection for '${bad}'`);
+  }
+});
+
+/* Widening the namespace must not widen what can be WRITTEN. Every one of
+ * these is a name whose only purpose is to leave src/zz_dev, and each has to
+ * die in the name gate rather than in path.join. */
+test('a wider namespace is still no way out of the dev sandbox', () => {
+  for (const escape of [
+    '../../src/01/z2ui5_cl_smpc_app_001',
+    'z2ui5_cl_x/../../../etc/passwd',
+    '/etc/passwd',
+    'zcl_app/../../x',
+    'zcl_app .clas',
+  ]) {
+    assert.throws(() => deployApp({ className: escape, source: 'x' }), /invalid class name/, `deploy '${escape}'`);
+    assert.throws(() => removeApp(escape), /invalid class name/, `remove '${escape}'`);
   }
 });
 
@@ -473,4 +514,176 @@ test('searching the catalogue narrows on every term and ranks a keyword hit firs
 
   assert.deepEqual(q('bookmark', { area: 'samples' }), []);
   assert.deepEqual(q('bookmark', { area: 'experimental-or-test' }), ['Z2UI5_CL_SMP_APP_321']);
+});
+
+/* The `docs:` block is a per-sample list of the cookbook chapters somebody
+ * decided that app is the worked example of - and this parser knew it only
+ * well enough to SKIP it while looking for the keywords. So the agent got a
+ * class to read and no way to reach the prose explaining what it demonstrates,
+ * which is the half a human reviewer opens first. */
+test('the docs links reach the caller instead of being skipped', () => {
+  const [e] = parseExamples(SAMPLES_MD_WITH_SUMMARY);
+  assert.deepEqual(e.docs, [{
+    topic: 'cookbook/expert_more/value_help',
+    url: 'https://abap2ui5.github.io/docs/cookbook/expert_more/value_help',
+  }]);
+  // several links in one block, as `samples` writes them
+  const md = SAMPLES_MD_WITH_SUMMARY.replace(
+    '<sub>docs: [cookbook/expert_more/value_help](https://abap2ui5.github.io/docs/cookbook/expert_more/value_help)</sub>',
+    '<sub>docs: [a/b](https://x/a/b), [c/d](https://x/c/d)</sub>',
+  );
+  assert.deepEqual(parseExamples(md)[0].docs.map((d) => d.topic), ['a/b', 'c/d']);
+  // a row without the block says so with an empty list, never undefined
+  assert.deepEqual(parseExamples(SAMPLES_MD).find((x) => x.cls === 'Z2UI5_CL_SMP_APP_321').docs, []);
+});
+
+/* samples-controls writes the whole row header in bold with nothing after it,
+ * and the row pattern required a dash after the bold half. So 430 of the 614
+ * apps - the entire demo-kit catalogue - parsed as rows with NO header of their
+ * own: `title` fell back to the section, and every port announced itself as the
+ * LIBRARY it belongs to ("sap.m", 109 times over) while the control an agent
+ * asked for survived only inside the keyword blob. */
+test('a bold row header without a dash after it is still the title', () => {
+  const md = [
+    '### sap.m',
+    '',
+    '| Sample | Class |',
+    '|---|---|',
+    '| **sap.m.Bar**<br>Each screen is typically a Page with a header.<br><sub>bar sap.m header</sub> | [`Z2UI5_CL_SMPC_APP_002`](src/01/01/z2ui5_cl_smpc_app_002.clas.abap) |',
+  ].join('\n');
+  const [e] = parseExamples(md, 'samples-controls');
+  assert.equal(e.title, 'sap.m.Bar');
+  assert.equal(e.label, 'sap.m.Bar', 'the label must name the control, not the library');
+  assert.equal(e.sub, '', 'nothing follows the header, so there is no sub-title - and no stray asterisks');
+  assert.equal(e.section, 'sap.m');
+  assert.equal(e.summary, 'Each screen is typically a Page with a header.');
+
+  // and the dashed shape the other two catalogues use is untouched
+  const [dashed] = parseExamples(SAMPLES_MD_WITH_SUMMARY);
+  assert.equal(dashed.label, 'Value Help: Suggestions and F4 Dialog');
+});
+
+// --------------------------------------------------------------- guide ----
+/* The app-building guide, sliced by chapter the way the pitfalls catalogues
+ * are. The document itself lives in the abap2UI5 checkout; the slicing does
+ * not need it. */
+
+const GUIDE_MD = [
+  '# Building apps with abap2UI5 — the agent guide',
+  '',
+  'Self-contained reference. When this guide and the code disagree, the code wins.',
+  '',
+  '## 1. The model in one paragraph',
+  '',
+  'An abap2UI5 app is one ABAP class implementing z2ui5_if_app.',
+  '',
+  '## 5. Events',
+  '',
+  'Register a named event and read it back on the next roundtrip.',
+  '',
+  '## 6. Popups, popovers, messages',
+  '',
+  'A popup is a second view displayed into the popup slot.',
+].join('\n');
+
+test('the guide keeps its intro as a section of its own', () => {
+  const sections = sliceGuide(GUIDE_MD);
+  assert.equal(sections.length, 4);
+  assert.equal(sections[0].heading, '(intro)');
+  assert.match(sections[0].body, /the code wins/, 'the "how to read this" half must survive');
+  assert.deepEqual(guideChapters(GUIDE_MD).slice(1), ['1. The model in one paragraph', '5. Events', '6. Popups, popovers, messages']);
+});
+
+/* A chapter can be asked for by number or by a word in its heading. A NUMBER
+ * has to mean the chapter number and nothing else: falling through to a
+ * substring match made `section: "5"` also return the view-builder chapter,
+ * whose heading carries `z2ui5_cl_ui5_view_builder`. A digit is a terrible
+ * needle in a document about a framework with one in its name. */
+test('a chapter can be asked for by number or by name, and a number means the number', () => {
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: '5' }).map((s) => s.heading), ['5. Events']);
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: 'events' }).map((s) => s.heading), ['5. Events']);
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: 'popup' }).map((s) => s.heading), ['6. Popups, popovers, messages']);
+  assert.deepEqual(sliceGuide(GUIDE_MD, { section: 'nope' }), []);
+});
+
+test('a guide query narrows to whole chapters that carry every term', () => {
+  assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip' }).map((s) => s.heading), ['5. Events']);
+  // AND, like every other search here
+  assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip popup' }), []);
+});
+
+// ---------------------------------------------------------- screenshot ----
+/* The viewport list screenshot_view takes. Refused rather than guessed at: a
+ * size that quietly fell back to the default would return a picture of the
+ * wrong viewport, and the viewport is the question being asked. */
+test('a viewport is parsed, or refused by name', () => {
+  assert.deepEqual(parseSizes(['390x844', '1280x900']), [
+    { width: 390, height: 844 }, { width: 1280, height: 900 },
+  ]);
+  assert.equal(parseSizes([]), undefined, 'no sizes means the default, not an empty list');
+  assert.equal(parseSizes(undefined), undefined);
+  for (const bad of ['huge', '390', '390*844', '390x', 'x844', '390x844px']) {
+    assert.throws(() => parseSizes([bad]), /invalid size/, `expected rejection for '${bad}'`);
+  }
+});
+
+// ----------------------------------------------------------- scaffold ----
+/* The class name is substituted into the sidecar's CLSNAME and into file
+ * names, so it is validated before it is used. An object whose ABAP and whose
+ * CLSNAME disagree looks right and does not activate - which is why
+ * app-template ships a rename script rather than an instruction. */
+test('a scaffold class name is an ABAP class name, or it is refused', () => {
+  for (const ok of ['zcl_my_app', 'ycl_app', 'zcx_error', 'zcl_a1_b2']) {
+    assert.equal(validClassName(ok), true, ok);
+  }
+  for (const bad of ['', 'zcl_', 'cl_my_app', 'zcl-my-app', '../etc/passwd',
+    'zcl_app/../../x', 'zcl_my app', 'zcl_' + 'x'.repeat(30)]) {
+    assert.equal(validClassName(bad), false, "expected refusal for '" + bad + "'");
+  }
+});
+
+test('scaffolding renames the class in the ABAP, the sidecar and the file name', (t) => {
+  const root = path.join(ROOT, '..', 'app-template');
+  if (!fs.existsSync(path.join(root, 'abaplint.jsonc'))) {
+    t.skip('app-template sibling not found');
+    return;
+  }
+  const { files, missing } = scaffold(root, {
+    cls: 'zcl_invoice_app', packageText: 'Invoice App', repo: 'invoice-app',
+  });
+  assert.deepEqual(missing, [], 'the template still has every file this serves');
+  assert.equal(files.length, TEMPLATE_FILES.length);
+
+  const at = (suffix) => files.find((f) => f.path.endsWith(suffix));
+  assert.ok(at('src/zcl_invoice_app.clas.abap'), 'the class file is named after the class');
+  assert.ok(at('src/zcl_invoice_app.clas.xml'), 'and so is its sidecar');
+  assert.match(at('.clas.abap').text, /CLASS zcl_invoice_app DEFINITION/);
+  // upper case in the sidecar, lower in the ABAP - that asymmetry is the bug
+  assert.match(at('.clas.xml').text, /<CLSNAME>ZCL_INVOICE_APP<\/CLSNAME>/);
+  assert.match(at('package.devc.xml').text, /<CTEXT>Invoice App<\/CTEXT>/);
+  assert.match(at('.abapgit.xml').text, /<NAME>invoice-app<\/NAME>/);
+
+  assert.ok(!files.some((f) => /zcl_app_001/i.test(f.text)),
+    'no file still carries the template own class name');
+  assert.ok(files.some((f) => f.path === 'AGENTS.md'),
+    'the briefing ships with the project - an agent without one is the gap this closes');
+});
+
+test('scaffolding without a class name returns the template as it stands', (t) => {
+  const root = path.join(ROOT, '..', 'app-template');
+  if (!fs.existsSync(path.join(root, 'abaplint.jsonc'))) {
+    t.skip('app-template sibling not found');
+    return;
+  }
+  const { files } = scaffold(root, {});
+  assert.ok(files.some((f) => f.path === 'src/zcl_app_001.clas.abap'));
+});
+
+test('a template missing a file reports it rather than shipping a shorter project', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-tpl-'));
+  fs.writeFileSync(path.join(dir, 'abaplint.jsonc'), '{}');
+  const { files, missing } = scaffold(dir, {});
+  assert.deepEqual(files.map((f) => f.path), ['abaplint.jsonc']);
+  assert.ok(missing.includes('src/zcl_app_001.clas.abap'));
+  assert.equal(missing.length, TEMPLATE_FILES.length - 1);
 });

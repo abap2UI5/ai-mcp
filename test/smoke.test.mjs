@@ -8,15 +8,23 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveSamplesControls, resolveViewCheck } from '../lib/repos.mjs';
+import { resolveSamplesControls, resolveViewCheck, resolveA2UI5 } from '../lib/repos.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const HAVE_CORPUS = !!resolveSamplesControls();
 const HAVE_LINTER = !!resolveViewCheck();
+const HAVE_A2UI5 = !!resolveA2UI5();
+/* The picture needs more than the linter checkout: the UI5 sources and the
+ * browser that renders them, which is an opt-in install there
+ * (@abap2ui5/render-runtime + `playwright install chromium`). Absent, this is
+ * not a failure of anything in THIS repo. */
+const HAVE_RENDER_RUNTIME = HAVE_LINTER
+  && fs.existsSync(path.join(resolveViewCheck(), 'node_modules', '@openui5', 'sap.m'));
 
 // the complete tool surface — a new/renamed/dropped tool must show up here
 export const TOOL_NAMES = [
+  'app_guide',
   'backend',
   'build_backend',
   'capabilities',
@@ -26,11 +34,13 @@ export const TOOL_NAMES = [
   'pitfalls',
   'remove_app',
   'run_app',
+  'scaffold_app',
   'scope_of',
+  'screenshot_view',
   'validate_view',
 ];
 
-test('stdio smoke: initialize, 11 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
+test('stdio smoke: initialize, 14 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));
@@ -92,6 +102,84 @@ test('stdio smoke: initialize, 11 tools, a capabilities query', { skip: !HAVE_CO
       assert.ok(!vv.result.isError, `validate_view errored: ${JSON.stringify(vv.result.content)}`);
       const body = JSON.parse(vv.result.content[0].text);
       assert.equal(body.ok, true, `clean view must validate ok: ${vv.result.content[0].text}`);
+
+      /* A finding must arrive EXPLAINED. The message is one terminal line; the
+       * paragraph behind the rule id lives in the linter's ./rule-docs export,
+       * and reaching it used to mean fetching a website mid-task. */
+      send({
+        jsonrpc: '2.0', id: 5, method: 'tools/call',
+        params: {
+          name: 'validate_view',
+          arguments: {
+            xml: '<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m"><Page title="x"><Button typ="Emphasized"/></Page></mvc:View>',
+            render: false,
+          },
+        },
+      });
+      const bad = JSON.parse((await until((m) => m.id === 5, 15000)).result.content[0].text);
+      assert.equal(bad.ok, false);
+      assert.ok(bad.rules && bad.rules['unknown-property'], `the rule that fired must be explained: ${JSON.stringify(bad.rules)}`);
+      assert.ok(bad.rules['unknown-property'].summary, 'the one-line summary comes by default');
+      assert.equal(bad.rules['unknown-property'].detail, undefined, 'the paragraph is opt-in, so the response stays small');
+
+      send({
+        jsonrpc: '2.0', id: 6, method: 'tools/call',
+        params: {
+          name: 'validate_view',
+          arguments: {
+            xml: '<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m"><Page title="x"><Button typ="Emphasized"/></Page></mvc:View>',
+            render: false,
+            explain: true,
+          },
+        },
+      });
+      const explained = JSON.parse((await until((m) => m.id === 6, 15000)).result.content[0].text);
+      assert.ok(explained.rules['unknown-property'].detail, 'explain:true returns the paragraph');
+    }
+
+    /* The cheap way to SEE a view: source in, IMAGE out, no backend and no
+     * build. The image travels as an MCP image content block, the way run_app
+     * has always returned its screenshot. */
+    if (HAVE_RENDER_RUNTIME) {
+      send({
+        jsonrpc: '2.0', id: 7, method: 'tools/call',
+        params: {
+          name: 'screenshot_view',
+          arguments: {
+            xml: '<mvc:View xmlns:mvc="sap.ui.core.mvc" xmlns="sap.m"><Page title="smoke"><Text text="hello"/></Page></mvc:View>',
+            sizes: ['400x300'],
+          },
+        },
+      });
+      const shot = (await until((m) => m.id === 7, 120000)).result;
+      const first = shot.content[0].text;
+      /* No browser installed is a missing PREREQUISITE, not a defect here -
+       * the render runtime is an opt-in install in the linter checkout and
+       * `playwright install chromium` is a separate step again. Anything else
+       * that goes wrong still fails the test. */
+      if (shot.isError && /browser|executable|chromium|playwright|render gate needs/i.test(first)) {
+        assert.ok(true, `screenshot skipped - no browser available: ${first.slice(0, 120)}`);
+      } else {
+        assert.ok(!shot.isError, `screenshot_view errored: ${first}`);
+        const image = shot.content.find((c) => c.type === 'image');
+        assert.ok(image, `an image content block must come back: ${JSON.stringify(shot.content.map((c) => c.type))}`);
+        assert.equal(image.mimeType, 'image/png');
+        assert.ok(image.data.length > 1000, 'the PNG must have content in it');
+        assert.equal(JSON.parse(first).views[0].size, '400x300', 'photographed at the viewport that was asked for');
+      }
+    }
+
+    /* The app-building guide - the rulebook for the job this server exists
+     * for, which used to be reachable only as the PORTING brief. */
+    if (HAVE_A2UI5) {
+      send({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'app_guide', arguments: { section: '1' } } });
+      const guide = (await until((m) => m.id === 8, 15000)).result;
+      assert.ok(!guide.isError, `app_guide errored: ${guide.content[0].text}`);
+      const g = JSON.parse(guide.content[0].text);
+      assert.equal(g.matches, 1, 'a numbered section selects exactly one chapter');
+      assert.match(g.sections[0].heading, /^1\./);
+      assert.ok(g.chapters.length > 3, `the whole table of contents comes back with it: ${g.chapters}`);
+      assert.ok(g.sections[0].body.length > 100, 'a chapter arrives with its text, not just its name');
     }
   } finally {
     p.kill();
