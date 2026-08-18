@@ -91,6 +91,14 @@ changes upstream, this repo must change in the same breath:
   `app_guide` serves. Its `## ` headings are the chapters that tool slices on;
   a rename of the file is a broken tool here (reported, not silent — the tool
   names the path it looked in).
+- app-template: **`template.json`** — the template's own description of what a
+  project takes from it (the placeholder class, `files.shared` / `files.named`,
+  and the substitutions that make them somebody's). `lib/scaffold.mjs` EXECUTES
+  that description and keeps no list of its own; a checkout without the file is
+  reported (`scaffold_app` says to pull), never guessed at. The template's
+  `npm run rename` and the VS Code extension's "New Project from Template" are
+  the other two executors — three programs, one description, so a file added to
+  the template reaches all three at once.
 - abap2UI5-linter: the package `exports` map entries `.`, `./findings`,
   `./config` and `./rule-docs` (and the shapes behind them: `checkFiles` and
   `screenshotFiles`, `severityOf` / `severityRank` / `SEVERITIES`,

@@ -10,7 +10,7 @@ import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import { sliceGuide, guideChapters } from '../lib/guide.mjs';
 import { parseSizes } from '../lib/screenshot.mjs';
-import { scaffold, validClassName, TEMPLATE_FILES } from '../lib/scaffold.mjs';
+import { scaffold, validClassName, templateFiles, readSpec } from '../lib/scaffold.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -652,7 +652,7 @@ test('scaffolding renames the class in the ABAP, the sidecar and the file name',
     cls: 'zcl_invoice_app', packageText: 'Invoice App', repo: 'invoice-app',
   });
   assert.deepEqual(missing, [], 'the template still has every file this serves');
-  assert.equal(files.length, TEMPLATE_FILES.length);
+  assert.equal(files.length, templateFiles(readSpec(root)).length);
 
   const at = (suffix) => files.find((f) => f.path.endsWith(suffix));
   assert.ok(at('src/zcl_invoice_app.clas.abap'), 'the class file is named after the class');
@@ -681,9 +681,23 @@ test('scaffolding without a class name returns the template as it stands', (t) =
 
 test('a template missing a file reports it rather than shipping a shorter project', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-tpl-'));
+  // The description comes from the template too, so the fixture carries the
+  // real one - a hand-written list here would be the copy this stopped keeping
+  fs.cpSync(path.join(ROOT, '..', 'app-template', 'template.json'), path.join(dir, 'template.json'));
   fs.writeFileSync(path.join(dir, 'abaplint.jsonc'), '{}');
-  const { files, missing } = scaffold(dir, {});
+  const { files, missing, spec } = scaffold(dir, {});
   assert.deepEqual(files.map((f) => f.path), ['abaplint.jsonc']);
   assert.ok(missing.includes('src/zcl_app_001.clas.abap'));
-  assert.equal(missing.length, TEMPLATE_FILES.length - 1);
+  assert.equal(missing.length, templateFiles(spec).length - 1);
+});
+
+/* Without template.json there is no list to serve, and the point of reading
+ * the template's own description is that this repo does not keep a second
+ * one to fall back on. */
+test('a template without its own description is reported, not guessed at', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-nospec-'));
+  fs.writeFileSync(path.join(dir, 'abaplint.jsonc'), '{}');
+  const { files, noSpec } = scaffold(dir, {});
+  assert.equal(noSpec, true);
+  assert.deepEqual(files, []);
 });
