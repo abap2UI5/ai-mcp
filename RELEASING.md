@@ -88,10 +88,14 @@ Done once, by hand, before there was anything on npm — repeat it if
   its shebang), `files`, `engines` (node >= 22), `repository`, `homepage`,
   `bugs`, `license`, `keywords`, `publishConfig.access: public`. No `main` and
   no `exports`, deliberately: this is a program, not a library.
-- **The tarball is 12 files, 44 kB packed / 130 kB unpacked**: `server.mjs`,
-  `lib/`, `README.md`, `AGENTS.md`, `LICENSE`, `package.json`. No tests, no
-  workflows, no lockfile. `AGENTS.md` ships on purpose — an agent that
-  installed this package can read the contract of the thing it is driving.
+- **The tarball is `server.mjs`, `lib/`, `README.md`, `LICENSE` and
+  `package.json`** — no tests, no workflows, no lockfile. `AGENTS.md` used to
+  ship too, on the reasoning that an agent could read the contract of the thing
+  it is driving; it cannot, because that file is written for an agent working
+  ON this repository (build & verify, the sibling checkouts the server writes
+  into, the maintenance traps). What an agent driving the server needs is the
+  tool descriptions it already receives over the protocol, and the README.
+  Re-measure the packed/unpacked size the next time this list changes.
 - **The packed tarball starts and answers.** Installed into a scratch project
   and driven over stdio through its `bin`: initialize, `tools/list`, and a
   tool call with every checkout absent, which has to come back as the

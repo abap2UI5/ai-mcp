@@ -30,8 +30,7 @@
     "server.mjs",
     "lib/",
     "README.md",
-    "LICENSE",
-    "AGENTS.md"
+    "LICENSE"
   ],
   "publishConfig": {
     "access": "public"
