@@ -37,15 +37,20 @@ happens at (~3 MB, a minute):
 
 ```sh
 git clone https://github.com/abap2UI5/linter        # AI_VIEW_CHECK_HOME
-git clone https://github.com/abap2UI5/mcp-server
-cd linter && npm ci && cd ../mcp-server && npm ci
+cd linter && npm ci
 ```
 
-Register it with Claude Code:
+The server itself is on npm, so it needs no checkout. Register it with Claude
+Code:
 
 ```sh
-claude mcp add abap2ui5 -- node /path/to/mcp-server/server.mjs
+claude mcp add abap2ui5 -- npx --yes @abap2ui5/mcp-server
 ```
+
+(The install is ~45 MB, 19 MB of it a Playwright driver only `run_app` uses —
+paid on the first start, cached after. From a checkout instead:
+`git clone https://github.com/abap2UI5/mcp-server && cd mcp-server && npm ci`,
+then `claude mcp add abap2ui5 -- node /path/to/mcp-server/server.mjs`.)
 
 Cursor, VS Code and Claude Desktop take the standard stdio shape — the
 [documentation](https://abap2ui5.github.io/docs/advanced/mcp_server.html#registering-it-with-your-client)

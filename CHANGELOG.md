@@ -1,10 +1,22 @@
 # Changelog
 
-## 0.1.0
+## Unreleased
 
-Nothing published yet — `@abap2ui5/mcp-server` has never been on npm. Everything
-below is what the first version will carry, and what changed since the server
-was only installable as `npx --yes github:abap2UI5/mcp-server`.
+- **The README installs from npm.** Level 1 no longer asks for a clone of this
+  repository — `npx --yes @abap2ui5/mcp-server` is the command, and a checkout
+  is named only as what you need to work ON the server. The client-registration
+  snippets show the same shape, with `node /path/to/server.mjs` as the
+  alternative rather than the default. The `npm ci` install is ~45 MB and
+  19 MB of that is the Playwright driver only `run_app` imports, so the README
+  says so where somebody first pays it.
+- **`npm run check`** — the ecosystem-wide name for "what CI will say about
+  this tree". Here CI runs the test suite and nothing else, so it is `npm test`.
+
+## 0.1.0 - 2026-08-18
+
+The first version on npm. Before it, the server was installable only as
+`npx --yes github:abap2UI5/mcp-server` — whatever `main` held that minute.
+Everything below is what 0.1.0 carries.
 
 - **Renamed: the repository is `mcp-server`, the package is `@abap2ui5/mcp-server`.**
   `mcp` names a protocol; `mcp-server` names the thing, which is what somebody
