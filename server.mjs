@@ -49,7 +49,7 @@ import { searchPitfalls } from './lib/pitfalls.mjs';
 import { readGuide, sliceGuide, guideChapters, guideFile, GUIDE_PATH } from './lib/guide.mjs';
 import { parseSizes, screenshotSource } from './lib/screenshot.mjs';
 import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, resolveAppTemplate, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
-import { scaffold, validClassName, TEMPLATE_FILES } from './lib/scaffold.mjs';
+import { scaffold, validClassName, templateFiles, SPEC_FILE } from './lib/scaffold.mjs';
 import {
   deployApp,
   removeApp,
@@ -593,20 +593,27 @@ async function handle(name, args = {}, ctx = {}) {
       }
 
       const root = resolveAppTemplate();
-      const { files, missing } = scaffold(root, {
+      const { files, missing, spec, noSpec } = scaffold(root, {
         cls,
         packageText: args.package,
         repo: args.repo,
       });
 
-      if (missing.length === TEMPLATE_FILES.length) {
+      /* The template describes which files a project takes, in its own
+       * `template.json`. Without it there is no list to serve — and guessing
+       * one here is exactly the second copy this tool stopped keeping. */
+      if (noSpec) {
+        return toolError(`the app-template checkout at ${root} has no ${SPEC_FILE} — `
+          + 'update it (git pull), or point APP_TEMPLATE_HOME at a current checkout');
+      }
+      if (missing.length === templateFiles(spec).length) {
         return toolError(`the app-template checkout at ${root} has none of the files this serves — `
           + 'update it (git pull), or point APP_TEMPLATE_HOME at a complete checkout');
       }
 
       return text({
         source: 'abap2UI5/app-template',
-        class: cls || 'zcl_app_001',
+        class: cls || spec.placeholderClass,
         files,
         /* Reported, never silent: this list is a claim about another
          * repository, and a project quietly missing its CI workflow is not

@@ -57,6 +57,11 @@ jobs:
       # thing to depend on.
       - run: git clone --depth 1 https://github.com/abap2UI5/samples-controls
       - run: git clone --depth 1 https://github.com/abap2UI5/linter
+      # app-template is a sibling this server reads too - scaffold_app serves
+      # its files and executes its template.json. Without the clone the three
+      # scaffold tests skip themselves, and a smoke job that silently covers
+      # less than it appears to is worse than one that fails.
+      - run: git clone --depth 1 https://github.com/abap2UI5/app-template
       - run: npm ci
         working-directory: ai-mcp
       - run: npm test

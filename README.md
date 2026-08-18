@@ -189,6 +189,10 @@ existing port, look at it, then build mine".
 - **Chromium:** uses the Playwright-managed browser; if absent, falls back to
   a system chromium (`A2UI5_MCP_CHROMIUM` overrides the executable path).
 - **Real system deployment** stays what it is today: abapGit. This server is
-  the inner dev loop; a `run_app_system` backend (launch URL + auth proxy, as
-  solved in the [VS Code extension](https://github.com/abap2UI5/vscode-extension))
-  is the planned second stage.
+  the inner dev loop; the real-system half already exists in the
+  [VS Code extension](https://github.com/abap2UI5/vscode-extension), whose own
+  MCP server exposes it as `run_app_on_system` (launch URL + auth proxy). Both
+  servers are registered in the same editor window, which is why that tool is
+  not called `run_app`: this one builds and boots the transpiled sandbox, that
+  one runs a class on a system, and an agent has to be able to tell them
+  apart.
