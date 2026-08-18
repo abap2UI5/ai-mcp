@@ -679,11 +679,20 @@ test('scaffolding without a class name returns the template as it stands', (t) =
   assert.ok(files.some((f) => f.path === 'src/zcl_app_001.clas.abap'));
 });
 
-test('a template missing a file reports it rather than shipping a shorter project', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-tpl-'));
+test('a template missing a file reports it rather than shipping a shorter project', (t) => {
   // The description comes from the template too, so the fixture carries the
-  // real one - a hand-written list here would be the copy this stopped keeping
-  fs.cpSync(path.join(ROOT, '..', 'app-template', 'template.json'), path.join(dir, 'template.json'));
+  // real one - a hand-written list here would be the copy this stopped keeping.
+  // That makes this test need the sibling checkout, exactly like the two
+  // scaffold tests above, and it must skip the same way: CI checks out this
+  // repository alone, and a test that reads a neighbour without saying so
+  // fails there for a reason that has nothing to do with the code.
+  const specFile = path.join(ROOT, '..', 'app-template', 'template.json');
+  if (!fs.existsSync(specFile)) {
+    t.skip('app-template sibling not found');
+    return;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a2u5-tpl-'));
+  fs.cpSync(specFile, path.join(dir, 'template.json'));
   fs.writeFileSync(path.join(dir, 'abaplint.jsonc'), '{}');
   const { files, missing, spec } = scaffold(dir, {});
   assert.deepEqual(files.map((f) => f.path), ['abaplint.jsonc']);
