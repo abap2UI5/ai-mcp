@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **MCP resources and prompts, next to the tools.** The server used to declare
+  `{ tools: {} }` and nothing else — a client that surfaces resources or
+  prompts saw an empty server, and an agent had to learn from sixteen
+  descriptions that `app_guide` comes first. The knowledge documents the tools
+  slice are now also readable whole, under stable `abap2ui5://` URIs (the
+  app-building guide plus a `guide/{chapter}` template, the client API
+  summary, CAPABILITIES.md, the porting rulebook, both pitfall catalogues) —
+  same live reads from the sibling checkouts, listing free of any file access,
+  and a read against a missing checkout failing with the same actionable
+  message the tool returns (the sibling table moved to `lib/siblings.mjs` so
+  there is one copy of those words). Two prompts render the workflow itself:
+  `build-an-abap2ui5-app` and `port-a-ui5-sample`, orchestration scripts over
+  the existing tools that duplicate none of their content. The tool-surface
+  drift gate covers both new surfaces: README tables and counts are checked
+  against the arrays, and every tool a rendered prompt names must exist.
+
 - **The README installs from npm.** Level 1 no longer asks for a clone of this
   repository — `npx --yes @abap2ui5/mcp-server` is the command, and a checkout
   is named only as what you need to work ON the server. The client-registration
