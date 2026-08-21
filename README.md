@@ -79,6 +79,7 @@ checkout is missing answers with the clone command and env var that fix it.
 | `api_reference` | The client API (`z2ui5_if_client`) with its ABAP-Doc: methods, parameters, defaults, the `cs_*` constants | abap2UI5 |
 | `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included | app-template |
 | `examples` | Search the three sample catalogues — answers with a class to read, never a snippet to trust | any of samples / samples-controls / samples-stack |
+| `docs_search` | Full-text search over the documentation site's pages: page, heading, snippet and the published URL | docs |
 | `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls | samples-controls |
 | `pitfalls` | The defects a green run does not catch: `{ area: "abap" }` and `{ area: "view" }` | abap2UI5 |
 | `scope_of` | In/out-of-scope verdict for a UI5 control | samples-controls + an OpenUI5 checkout |

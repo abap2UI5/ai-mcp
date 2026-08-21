@@ -29,6 +29,7 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
       A2UI5_HOME: path.join(NOWHERE, 'abap2UI5'),
       AI_VIEW_CHECK_HOME: path.join(NOWHERE, 'linter'),
       APP_TEMPLATE_HOME: path.join(NOWHERE, 'app-template'),
+      DOCS_HOME: path.join(NOWHERE, 'docs'),
     },
   });
   let buf = '';
@@ -145,6 +146,8 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     // the client API is an interface in the framework sources
     expectMissing(await call('api_reference', {}), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('api_reference', { query: 'toast' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    // the documentation site has a checkout of its own
+    expectMissing(await call('docs_search', { query: 'value help' }), /docs checkout not found/, 'DOCS_HOME');
     expectMissing(await call('backend', { action: 'start' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'restart' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
 

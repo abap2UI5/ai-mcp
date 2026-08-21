@@ -38,7 +38,8 @@ import { searchPitfalls } from './lib/pitfalls.mjs';
 import { readGuide, sliceGuide, guideChapters, guideFile, GUIDE_PATH } from './lib/guide.mjs';
 import { readApi, parseApi, searchApi, apiSummary, apiFile, API_PATH } from './lib/api.mjs';
 import { parseSizes, screenshotSource } from './lib/screenshot.mjs';
-import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, resolveAppTemplate, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, resolveAppTemplate, resolveDocs, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
+import { searchDocs, docsRoot } from './lib/docs.mjs';
 import { scaffold, validClassName, templateFiles, SPEC_FILE } from './lib/scaffold.mjs';
 import { TOOLS } from './lib/tools.mjs';
 import {
@@ -87,6 +88,10 @@ const SIBLING_REPOS = {
   'app-template': {
     resolve: resolveAppTemplate,
     hint: 'clone https://github.com/abap2UI5/app-template as a sibling of mcp-server, or point APP_TEMPLATE_HOME at an existing checkout',
+  },
+  docs: {
+    resolve: resolveDocs,
+    hint: 'clone https://github.com/abap2UI5/docs as a sibling of mcp-server, or point DOCS_HOME at an existing checkout',
   },
 };
 
@@ -344,6 +349,30 @@ async function handle(name, args = {}, ctx = {}) {
           'More depth: AGENTS.md (conventions, gates), CAPABILITIES.md via the capabilities tool, ' +
           'and https://abap2ui5.github.io/docs/cookbook/overview for the cookbook.',
       );
+    }
+    case 'docs_search': {
+      const miss = missingSibling('docs');
+      if (miss) return miss;
+      if (!args.query) return toolError('pass `query` — keywords to search the documentation for, e.g. "value help" or "launchpad"');
+      const entries = searchDocs({ query: args.query, limit: args.limit ?? 10 });
+      // the checkout can be there and the tree not: a half-finished pull, a
+      // layout change upstream. Name the directory, the way app_guide does.
+      if (entries === null || !fs.existsSync(docsRoot())) {
+        return toolError(`the docs checkout has no docs/ page tree (looked in ${docsRoot()}) — `
+          + 'update it (git pull); the site sources live there');
+      }
+      if (!entries.length) {
+        return text({
+          matches: 0,
+          hint: `no documentation page carries every term of "${args.query}" — fewer or broader terms widen the net; `
+            + 'app_guide covers building an app, api_reference the client API',
+        });
+      }
+      return text({
+        matches: entries.length,
+        entries,
+        next: 'fetch the `markdown` URL of the best hit for the whole page — or read docs/<path>.md in the checkout',
+      });
     }
     case 'pitfalls': {
       // the catalogues live in the abap2UI5 checkout, not in the corpus

@@ -38,6 +38,7 @@ is no silent fallback to the sibling guess.
 | `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/`, `.claude/skills/{abap-check,ui5-check}/SKILL.md` (`pitfalls`), `docs/agents/building-apps.md` (`app_guide`) |
 | `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `SAMPLES.md` — one of the three catalogues `examples` searches |
 | `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `SAMPLES.md` — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
+| `DOCS_HOME` | `../docs` | `docs/**/*.md` — the documentation site's sources, searched live by `docs_search` |
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view` + `screenshot_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config`, `./rule-docs` (via `importViewCheck`) |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
@@ -97,6 +98,13 @@ changes upstream, this repo must change in the same breath:
   methods, `cs_*` constants, types, the ABAP-Doc and inline notes), relying on
   the abaplint-pinned formatting; a move of the file is reported by path, and
   a formatting change upstream is a parser change here.
+- docs: the `docs/` markdown tree (everything but `.vitepress`, `public` and
+  `node_modules` is a page) and the **published URL scheme** its
+  `scripts/generate-llms.mjs` derives — `https://abap2ui5.github.io/docs/<path>`
+  plus `.html` for the rendered page and `.md` for the raw twin published
+  beside it. `docs_search` (`lib/docs.mjs`) walks the same tree with the same
+  exclusions and hands back that URL pair; a change to either upstream is a
+  change here.
 - app-template: **`template.json`** — the template's own description of what a
   project takes from it (the placeholder class, `files.shared` / `files.named`,
   and the substitutions that make them somebody's). `lib/scaffold.mjs` EXECUTES
@@ -152,7 +160,7 @@ importing it in a test hangs the run rather than failing it — which is why
 it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 15 tools,
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 16 tools,
 a capabilities query) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
@@ -170,7 +178,7 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 15 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 16 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
 table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`
@@ -234,6 +242,7 @@ legitimately slower.
 | [samples-controls](https://github.com/abap2UI5/samples-controls) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime — and one of the three `examples` catalogues |
 | [samples](https://github.com/abap2UI5/samples) | The pattern catalogue `examples` searches |
 | [samples-stack](https://github.com/abap2UI5/samples-stack) | The stack-dependent catalogue `examples` searches |
-| [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server |
+| [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server — and the client API `api_reference` parses |
+| [docs](https://github.com/abap2UI5/docs) | The documentation site `docs_search` reads, in source form |
 | [abap2UI5-linter](https://github.com/abap2UI5/linter) | `validate_view` implementation (imported via its package `exports` map) |
 | [vscode-extension](https://github.com/abap2UI5/vscode-extension) | Registers this server for MCP clients in the editor (`src/mcp.ts`) |

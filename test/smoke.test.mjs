@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveSamplesControls, resolveViewCheck, resolveA2UI5 } from '../lib/repos.mjs';
+import { resolveSamplesControls, resolveViewCheck, resolveA2UI5, resolveDocs } from '../lib/repos.mjs';
 import { TOOL_NAMES } from '../lib/tools.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -16,6 +16,7 @@ const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const HAVE_CORPUS = !!resolveSamplesControls();
 const HAVE_LINTER = !!resolveViewCheck();
 const HAVE_A2UI5 = !!resolveA2UI5();
+const HAVE_DOCS = !!resolveDocs();
 /* The picture needs more than the linter checkout: the UI5 sources and the
  * browser that renders them, which is an opt-in install there
  * (@abap2ui5/render-runtime + `playwright install chromium`). Absent, this is
@@ -186,6 +187,20 @@ test(`stdio smoke: initialize, ${TOOL_NAMES.length} tools, a capabilities query`
       assert.ok(apiAll.methods.length > 20, 'every method is listed');
       assert.ok(apiAll.constants.some((c) => c.name === 'cs_event'), 'the constant groups are listed');
       assert.ok(apiAll.methods.some((m) => m.obsolete), 'obsolete methods are marked, not hidden');
+    }
+
+    /* The documentation site, searched from its checkout: a hit must carry
+     * the published URL pair the docs repo actually serves. */
+    if (HAVE_DOCS) {
+      send({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'docs_search', arguments: { query: 'mcp server', limit: 3 } } });
+      const docsRes = (await until((m) => m.id === 11, 15000)).result;
+      assert.ok(!docsRes.isError, `docs_search errored: ${docsRes.content[0].text}`);
+      const docs = JSON.parse(docsRes.content[0].text);
+      assert.ok(docs.matches > 0, 'the site documents its own MCP server');
+      const [hit] = docs.entries;
+      assert.match(hit.url, /^https:\/\/abap2ui5\.github\.io\/docs\/.+\.html$/);
+      assert.match(hit.markdown, /^https:\/\/abap2ui5\.github\.io\/docs\/.+\.md$/);
+      assert.ok(hit.title && hit.heading, 'a hit names its page and section');
     }
   } finally {
     p.kill();

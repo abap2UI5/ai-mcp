@@ -10,6 +10,7 @@ import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import { sliceGuide, guideChapters } from '../lib/guide.mjs';
 import { parseApi, searchApi, apiSummary } from '../lib/api.mjs';
+import { searchDocs } from '../lib/docs.mjs';
 import { parseSizes } from '../lib/screenshot.mjs';
 import { scaffold, validClassName, templateFiles, readSpec } from '../lib/scaffold.mjs';
 import fs from 'node:fs';
@@ -611,6 +612,79 @@ test('a guide query narrows to whole chapters that carry every term', () => {
   assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip' }).map((s) => s.heading), ['5. Events']);
   // AND, like every other search here
   assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip popup' }), []);
+});
+
+// ------------------------------------------------------------- docs_search ----
+/* The documentation search over injected fixture pages - the real tree lives
+ * in the docs checkout, the semantics must not need it. What is pinned: AND-ed
+ * terms, the title > heading > body ranking, the published URL pair built the
+ * way the docs repo's own generate-llms.mjs builds them (SITE + /<path> plus
+ * the extension), and a snippet that quotes the matching section. */
+
+const DOC_PAGES = [
+  {
+    path: 'cookbook/value_help',
+    text: '---\ntitle: meta\n---\n# Value Help\n\nBoth halves of the value help.\n\n## The F4 dialog\n\nThe dialog behind the field opens on F4.\n',
+  },
+  {
+    path: 'advanced/linter',
+    text: '# The linter\n\nChecks a view without a system.\n\n## Value help findings\n\nA suggestion-only field is flagged.\n',
+  },
+  {
+    path: 'get_started/setup',
+    text: '# Setup\n\nInstall abapGit first. The value help sample helps later.\n\n```abap\n" value help inside a fence is still body text\n```\n',
+  },
+];
+
+test('docs are ranked title over heading over body, terms AND-ed', () => {
+  const hits = searchDocs({ query: 'value help', pages: DOC_PAGES });
+  assert.deepEqual(hits.map((h) => h.path),
+    ['cookbook/value_help', 'advanced/linter', 'get_started/setup']);
+  // AND: adding a term that only one page carries narrows to it
+  assert.deepEqual(searchDocs({ query: 'value help suggestion', pages: DOC_PAGES }).map((h) => h.path),
+    ['advanced/linter']);
+  assert.deepEqual(searchDocs({ query: 'value help nonexistent', pages: DOC_PAGES }), []);
+  assert.deepEqual(searchDocs({ query: '', pages: DOC_PAGES }), []);
+});
+
+test('a docs hit carries the published URL pair and a quoting snippet', () => {
+  const [hit] = searchDocs({ query: 'f4 dialog', pages: DOC_PAGES });
+  assert.equal(hit.path, 'cookbook/value_help');
+  assert.equal(hit.title, 'Value Help', 'the title is the # heading, not the frontmatter');
+  assert.equal(hit.heading, 'The F4 dialog', 'the best-matching section is named');
+  assert.match(hit.snippet, /opens on F4/);
+  // the URL shapes the docs repo publishes: <path>.html rendered, <path>.md raw
+  assert.equal(hit.url, 'https://abap2ui5.github.io/docs/cookbook/value_help.html');
+  assert.equal(hit.markdown, 'https://abap2ui5.github.io/docs/cookbook/value_help.md');
+});
+
+test('the docs search honours its limit and never throws on damaged pages', () => {
+  assert.equal(searchDocs({ query: 'value', pages: DOC_PAGES, limit: 2 }).length, 2);
+  for (const bad of ['', '---\nunclosed', '# only a title', '```\nfence never closed', '## \n\n|']) {
+    assert.doesNotThrow(() => searchDocs({ query: 'x y', pages: [{ path: 'p', text: bad }] }),
+      `searchDocs threw on ${JSON.stringify(bad)}`);
+  }
+});
+
+test('a docs checkout is found through DOCS_HOME and its probe', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-docs-'));
+  try {
+    fs.mkdirSync(path.join(home, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'docs', 'index.md'), '# docs');
+    const found = execFileSync(process.execPath, ['-e',
+      "import('./lib/repos.mjs').then(m => process.stdout.write(String(m.resolveDocs())))"],
+    { cwd: ROOT, env: { ...process.env, DOCS_HOME: home }, encoding: 'utf8' });
+    assert.equal(found, home);
+    // a directory without the page tree is not a docs checkout
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-notdocs-'));
+    const miss = execFileSync(process.execPath, ['-e',
+      "import('./lib/repos.mjs').then(m => process.stdout.write(String(m.resolveDocs())))"],
+    { cwd: ROOT, env: { ...process.env, DOCS_HOME: empty }, encoding: 'utf8' });
+    assert.equal(miss, 'null', 'a set env var pointing at a non-checkout must resolve to null, not fall through');
+    fs.rmSync(empty, { recursive: true, force: true });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
 
 // ------------------------------------------------------------------ api ----
