@@ -36,7 +36,17 @@ test('build_backend emits notifications/progress when the client sends a progres
 
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], {
     stdio: ['pipe', 'pipe', 'ignore'],
-    env: { ...process.env, AI_DEMOKIT_HOME: demokit, A2UI5_HOME: a2 },
+    env: {
+      ...process.env,
+      AI_DEMOKIT_HOME: demokit,
+      /* AI_DEMOKIT_HOME is the OLDER var, and a SAMPLES_CONTROLS_HOME set in
+       * the surrounding shell outranks it by design (newest-first, first SET
+       * wins). Cleared here so the fake corpus above decides - without this,
+       * a developer whose environment points at a real samples-controls
+       * checkout watches this test run the real build instead. */
+      SAMPLES_CONTROLS_HOME: '',
+      A2UI5_HOME: a2,
+    },
   });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));
@@ -98,7 +108,17 @@ test('build_backend sends no progress notifications without a progressToken', as
 
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], {
     stdio: ['pipe', 'pipe', 'ignore'],
-    env: { ...process.env, AI_DEMOKIT_HOME: demokit, A2UI5_HOME: a2 },
+    env: {
+      ...process.env,
+      AI_DEMOKIT_HOME: demokit,
+      /* AI_DEMOKIT_HOME is the OLDER var, and a SAMPLES_CONTROLS_HOME set in
+       * the surrounding shell outranks it by design (newest-first, first SET
+       * wins). Cleared here so the fake corpus above decides - without this,
+       * a developer whose environment points at a real samples-controls
+       * checkout watches this test run the real build instead. */
+      SAMPLES_CONTROLS_HOME: '',
+      A2UI5_HOME: a2,
+    },
   });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));
