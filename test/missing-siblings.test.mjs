@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOL_NAMES } from '../lib/tools.mjs';
+import { RESOURCE_URIS } from '../lib/resources.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -155,6 +156,36 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     const status = await call('backend', { action: 'status' });
     assert.ok(!status.isError, `backend status must work without checkouts: ${JSON.stringify(status)}`);
     assert.equal(JSON.parse(status.content[0].text).built, false);
+
+    /* Resources degrade the same way, on the read and never on the list.
+     * Listing is names and URIs from lib/resources.mjs — no file is touched,
+     * so the full catalogue is listed even here, with every checkout absent.
+     * A read against a missing checkout is the read request's JSON-RPC error,
+     * carrying the same actionable message the tool returns. */
+    send({ jsonrpc: '2.0', id: 3, method: 'resources/list' });
+    const resList = await until((m) => m.id === 3);
+    assert.deepEqual(resList.result.resources.map((r) => r.uri).sort(), RESOURCE_URIS,
+      'the resource list must not shrink when checkouts are missing');
+
+    const readErr = async (uri) => {
+      const reqId = ++id + 200;
+      send({ jsonrpc: '2.0', id: reqId, method: 'resources/read', params: { uri } });
+      const msg = await until((m) => m.id === reqId);
+      assert.ok(msg.error, `reading ${uri} without its checkout must be a JSON-RPC error: ${JSON.stringify(msg)}`);
+      return msg.error.message;
+    };
+    const expectMissingRead = (text, repoRe, envVar) => {
+      assert.match(text, repoRe, `read error must name the missing repo: ${text}`);
+      assert.match(text, new RegExp(envVar), `read error must name the env var: ${text}`);
+      assert.match(text, /clone|checkout/i, `read error must say how to fix it: ${text}`);
+    };
+    expectMissingRead(await readErr('abap2ui5://guide'), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissingRead(await readErr('abap2ui5://guide/5'), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissingRead(await readErr('abap2ui5://api'), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissingRead(await readErr('abap2ui5://pitfalls/abap'), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissingRead(await readErr('abap2ui5://pitfalls/view'), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissingRead(await readErr('abap2ui5://capabilities'), CORPUS, 'SAMPLES_CONTROLS_HOME');
+    expectMissingRead(await readErr('abap2ui5://generation-rules'), CORPUS, 'SAMPLES_CONTROLS_HOME');
   } finally {
     p.kill();
   }

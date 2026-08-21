@@ -48,8 +48,10 @@ and `A2UI5_MCP_BUILD_TIMEOUT_MS` (default 30 min).
 
 A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool returns a uniform, actionable
-error — which repo, how to clone it, which env var; see `missingSibling` in
-`server.mjs`) — `validate_view`/`screenshot_view` need the linter,
+error — which repo, how to clone it, which env var; the repo-and-hint table is
+`lib/siblings.mjs`, wrapped by `missingSibling` in `server.mjs` and thrown
+as the read error by `lib/resources.mjs`, so tools and resources degrade
+with the same words) — `validate_view`/`screenshot_view` need the linter,
 `run_app`/`backend` need the core repo (and so do `pitfalls`, `app_guide` and
 `api_reference`, whose documents and interface are maintained beside the
 framework sources), almost everything else needs samples-controls. The README used to call the linter
@@ -180,8 +182,8 @@ it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
 `test/smoke.test.mjs` boots the real server over stdio (initialize, 16 tools,
-a capabilities query) and **skips itself when the samples-controls sibling is
-absent**, so `npm test` is green in a bare checkout and exercises the full
+a capabilities query, the resource list and a resource read) and **skips
+itself when the samples-controls sibling is absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
 on every push/PR. Manual stdio driving, when a test is not enough:
 
@@ -227,6 +229,17 @@ legitimately slower.
   README table row — and the gate tells you about every count left behind.
   The server `version` is read from `package.json` at startup and asserted by
   the tests.
+- **The resource surface has the same one source: `lib/resources.mjs`.** The
+  `RESOURCES` array (plus `RESOURCE_TEMPLATES` for the per-chapter guide) is
+  what `resources/list` serves, and the same gate file checks the README's
+  Resources table and every written-out "N resources" count against it. Two
+  rules are load-bearing: **listing reads no file** (a client may poll it, and
+  a missing sibling must not make the list shrink or fail — which is why the
+  guide chapters are a template, not enumerated entries), and **a read
+  degrades exactly like a tool call** (the `lib/siblings.mjs` message, thrown,
+  reaching the client as the read request's JSON-RPC error —
+  `test/missing-siblings.test.mjs` pins both). The resources hand over the
+  same documents the tools slice; nothing may be bundled or paraphrased here.
 - **A tool description is the only documentation the agent reads.** It never
   sees this file, the README or a comment — it picks a tool from the sentence
   in `TOOLS`. So two tools that answer neighbouring questions have to say

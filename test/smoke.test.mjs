@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveSamplesControls, resolveViewCheck, resolveA2UI5, resolveDocs } from '../lib/repos.mjs';
 import { TOOL_NAMES } from '../lib/tools.mjs';
+import { RESOURCE_URIS, GUIDE_CHAPTER_TEMPLATE } from '../lib/resources.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -201,6 +202,38 @@ test(`stdio smoke: initialize, ${TOOL_NAMES.length} tools, a capabilities query`
       assert.match(hit.url, /^https:\/\/abap2ui5\.github\.io\/docs\/.+\.html$/);
       assert.match(hit.markdown, /^https:\/\/abap2ui5\.github\.io\/docs\/.+\.md$/);
       assert.ok(hit.title && hit.heading, 'a hit names its page and section');
+    }
+
+    /* The knowledge documents as MCP resources: the list is the derived
+     * catalogue from lib/resources.mjs (names and URIs, no file reads), the
+     * per-chapter guide is a resource TEMPLATE, and a read hands the document
+     * over whole. */
+    send({ jsonrpc: '2.0', id: 12, method: 'resources/list' });
+    const resList = (await until((m) => m.id === 12)).result;
+    assert.deepEqual(resList.resources.map((r) => r.uri).sort(), RESOURCE_URIS);
+    for (const r of resList.resources) {
+      assert.ok(r.name && r.description && r.mimeType, `resource ${r.uri} must carry name, description, mimeType`);
+    }
+
+    send({ jsonrpc: '2.0', id: 13, method: 'resources/templates/list' });
+    const tmpl = (await until((m) => m.id === 13)).result;
+    assert.deepEqual(tmpl.resourceTemplates.map((t) => t.uriTemplate), [GUIDE_CHAPTER_TEMPLATE]);
+
+    // the capability map read whole — the corpus is present in this suite
+    send({ jsonrpc: '2.0', id: 14, method: 'resources/read', params: { uri: 'abap2ui5://capabilities' } });
+    const capRead = await until((m) => m.id === 14);
+    assert.ok(!capRead.error, `reading the capability map errored: ${JSON.stringify(capRead.error)}`);
+    const [capDoc] = capRead.result.contents;
+    assert.equal(capDoc.uri, 'abap2ui5://capabilities');
+    assert.equal(capDoc.mimeType, 'text/markdown');
+    assert.ok(capDoc.text.length > 1000, 'the whole document comes back, not a stub');
+
+    if (HAVE_A2UI5) {
+      // one chapter through the template, same slicing as the app_guide tool
+      send({ jsonrpc: '2.0', id: 15, method: 'resources/read', params: { uri: 'abap2ui5://guide/1' } });
+      const chap = await until((m) => m.id === 15);
+      assert.ok(!chap.error, `reading a guide chapter errored: ${JSON.stringify(chap.error)}`);
+      assert.match(chap.result.contents[0].text, /^## 1\./, 'the asked-for chapter, with its heading');
     }
   } finally {
     p.kill();

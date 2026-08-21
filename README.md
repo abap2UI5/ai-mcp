@@ -103,6 +103,25 @@ same question at three orders of magnitude apart: the first photographs the
 reconstructed **view** with no backend, the second the **running app** after a
 build. Most iterations should end at the first.
 
+## Resources
+
+The knowledge documents behind those tools are also MCP **resources**, for
+clients that surface them (context pickers, attach-a-document UIs) and for
+agents that want a document whole instead of sliced. Same live reads from the
+same sibling checkouts: listing is free (no checkout needed), reading a
+resource whose checkout is missing answers with the same actionable error the
+tool gives.
+
+| Resource | Content | Needs |
+|---|---|---|
+| `abap2ui5://guide` | The app-building guide, whole (`app_guide` slices it) | abap2UI5 |
+| `abap2ui5://guide/{chapter}` | One guide chapter, by number or heading keyword (a resource template) | abap2UI5 |
+| `abap2ui5://api` | The client API summary — every `z2ui5_if_client` method, constant group and type, one line each | abap2UI5 |
+| `abap2ui5://pitfalls/abap` | abap-check — the ABAP defects a green CI does not catch | abap2UI5 |
+| `abap2ui5://pitfalls/view` | ui5-check — the view defects a green CI does not catch | abap2UI5 |
+| `abap2ui5://capabilities` | CAPABILITIES.md — the verified capability map | samples-controls |
+| `abap2ui5://generation-rules` | The rulebook for porting a UI5 demo-kit sample | samples-controls |
+
 ## Notes
 
 - **Dev sandbox:** deployed apps land in the samples-controls checkout's

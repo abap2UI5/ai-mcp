@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOLS, TOOL_NAMES } from '../lib/tools.mjs';
+import { RESOURCES, RESOURCE_URIS, RESOURCE_TEMPLATES } from '../lib/resources.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -48,6 +49,38 @@ test('every written-out tool count matches the TOOLS array', () => {
     for (const m of text.matchAll(/(\d+)\s+tools\b/g)) {
       assert.equal(Number(m[1]), TOOLS.length,
         `${file} says "${m[0]}" but lib/tools.mjs defines ${TOOLS.length} tools`);
+    }
+  }
+});
+
+/* The resource surface gets the same treatment as the tools the moment it
+ * exists: one source (lib/resources.mjs), and the documents that spell it out
+ * are checked against it. */
+test('every resource has a stable URI, a name, a description and a mime type', () => {
+  assert.ok(RESOURCES.length > 0);
+  for (const r of RESOURCES) {
+    assert.match(r.uri, /^abap2ui5:\/\/[a-z0-9/-]+$/, `resource URI '${r.uri}' must be a stable abap2ui5:// path`);
+    assert.match(r.name, /^[a-z][a-z0-9-]*$/, `resource name '${r.name}' must be a lowercase identifier`);
+    assert.ok(r.description && r.description.length > 60, `'${r.uri}' needs a real description, not a label`);
+    assert.ok(r.mimeType, `'${r.uri}' must declare a mime type`);
+  }
+  assert.equal(new Set(RESOURCE_URIS).size, RESOURCES.length, 'resource URIs must be unique');
+});
+
+test('the README resources table lists exactly the RESOURCES URIs plus the templates', () => {
+  const readme = read('README.md');
+  const listed = [...readme.matchAll(/^\| `(abap2ui5:\/\/[^`]+)` \|/gm)].map((m) => m[1]).sort();
+  const expected = [...RESOURCE_URIS, ...RESOURCE_TEMPLATES.map((t) => t.uriTemplate)].sort();
+  assert.deepEqual(listed, expected,
+    'README.md "Resources" table and lib/resources.mjs disagree - update the table (one row per resource/template, URI in backticks)');
+});
+
+test('every written-out resource count matches the RESOURCES array', () => {
+  for (const file of ['README.md', 'AGENTS.md', 'server.mjs', 'CONTRIBUTING.md']) {
+    const text = read(file);
+    for (const m of text.matchAll(/(\d+)\s+resources\b/g)) {
+      assert.equal(Number(m[1]), RESOURCES.length,
+        `${file} says "${m[0]}" but lib/resources.mjs defines ${RESOURCES.length} resources`);
     }
   }
 });

@@ -31,17 +31,25 @@ import fs from 'fs';
 import os from 'os';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ReadResourceRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
 import { searchExamples, exampleSummary, catalogueFiles } from './lib/examples.mjs';
 import { searchPitfalls } from './lib/pitfalls.mjs';
 import { readGuide, sliceGuide, guideChapters, guideFile, GUIDE_PATH } from './lib/guide.mjs';
 import { readApi, parseApi, searchApi, apiSummary, apiFile, API_PATH } from './lib/api.mjs';
 import { parseSizes, screenshotSource } from './lib/screenshot.mjs';
-import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, resolveAppTemplate, resolveDocs, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
+import { resolveSamplesControls, resolveAppTemplate, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
 import { searchDocs, docsRoot } from './lib/docs.mjs';
 import { scaffold, validClassName, templateFiles, SPEC_FILE } from './lib/scaffold.mjs';
 import { TOOLS } from './lib/tools.mjs';
+import { RESOURCES, RESOURCE_TEMPLATES, readResource } from './lib/resources.mjs';
+import { missingSiblingMessage } from './lib/siblings.mjs';
 import {
   deployApp,
   removeApp,
@@ -67,40 +75,12 @@ function toolError(message) {
 /* Every tool that reads a sibling checkout degrades to the same clear,
  * actionable error when the checkout is missing (instead of a TypeError from
  * path.join(null, ...)): which repo is absent, how to clone it, which env var
- * points at an existing checkout. The server itself always starts. */
-const SIBLING_REPOS = {
-  'samples-controls': {
-    resolve: resolveSamplesControls,
-    hint: 'clone https://github.com/abap2UI5/samples-controls as a sibling of mcp-server, or point SAMPLES_CONTROLS_HOME at an existing checkout (AI_DEMOKIT_HOME, its former name, is still read)',
-  },
-  abap2UI5: {
-    resolve: resolveA2UI5,
-    hint: 'clone https://github.com/abap2UI5/abap2UI5 as a sibling of mcp-server (or run `npm run node:setup` in samples-controls), or point A2UI5_HOME at an existing checkout',
-  },
-  samples: {
-    resolve: resolveSamples,
-    hint: 'clone https://github.com/abap2UI5/samples as a sibling of mcp-server, or point SAMPLES_HOME at an existing checkout',
-  },
-  linter: {
-    resolve: resolveViewCheck,
-    hint: 'clone https://github.com/abap2UI5/linter as a sibling of mcp-server, or point AI_VIEW_CHECK_HOME at an existing checkout',
-  },
-  'app-template': {
-    resolve: resolveAppTemplate,
-    hint: 'clone https://github.com/abap2UI5/app-template as a sibling of mcp-server, or point APP_TEMPLATE_HOME at an existing checkout',
-  },
-  docs: {
-    resolve: resolveDocs,
-    hint: 'clone https://github.com/abap2UI5/docs as a sibling of mcp-server, or point DOCS_HOME at an existing checkout',
-  },
-};
-
+ * points at an existing checkout. The server itself always starts. The table
+ * of repos and hints lives in lib/siblings.mjs, shared with the resource
+ * reads, so both surfaces degrade with the same words. */
 function missingSibling(...repos) {
-  for (const name of repos) {
-    const { resolve, hint } = SIBLING_REPOS[name];
-    if (!resolve()) return toolError(`${name} checkout not found — ${hint}`);
-  }
-  return null;
+  const msg = missingSiblingMessage(...repos);
+  return msg ? toolError(msg) : null;
 }
 
 /* Throttled MCP progress from a long child's output: one
@@ -621,10 +601,18 @@ const PKG = JSON.parse(fs.readFileSync(path.join(SERVER_ROOT, 'package.json'), '
 
 const server = new Server(
   { name: 'abap2ui5', version: PKG.version },
-  { capabilities: { tools: {} } },
+  { capabilities: { tools: {}, resources: {} } },
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+
+/* The knowledge documents, as resources (lib/resources.mjs): listing is free
+ * (names and URIs, no file touched), reading resolves the sibling live and
+ * throws the same missing-checkout message the tools return — the client sees
+ * it as the read request's JSON-RPC error. */
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES }));
+server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: RESOURCE_TEMPLATES }));
+server.setRequestHandler(ReadResourceRequestSchema, async (req) => readResource(req.params.uri));
 server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
   try {
     return await handle(req.params.name, req.params.arguments || {}, {
