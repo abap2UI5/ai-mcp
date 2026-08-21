@@ -142,6 +142,9 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     // and so does the app-building guide - it is maintained beside the sources
     expectMissing(await call('app_guide', {}), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('app_guide', { section: '5' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    // the client API is an interface in the framework sources
+    expectMissing(await call('api_reference', {}), /abap2UI5 checkout not found/, 'A2UI5_HOME');
+    expectMissing(await call('api_reference', { query: 'toast' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'start' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissing(await call('backend', { action: 'restart' }), /abap2UI5 checkout not found/, 'A2UI5_HOME');
 

@@ -76,6 +76,7 @@ checkout is missing answers with the clone command and env var that fix it.
 |---|---|---|
 | `capabilities` | Whether abap2UI5 can express a UI5 feature at all, from the verified capability map | samples-controls |
 | `app_guide` | How to build an app, live from the framework checkout | abap2UI5 |
+| `api_reference` | The client API (`z2ui5_if_client`) with its ABAP-Doc: methods, parameters, defaults, the `cs_*` constants | abap2UI5 |
 | `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included | app-template |
 | `examples` | Search the three sample catalogues — answers with a class to read, never a snippet to trust | any of samples / samples-controls / samples-stack |
 | `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls | samples-controls |

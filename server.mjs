@@ -36,6 +36,7 @@ import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
 import { searchExamples, exampleSummary, catalogueFiles } from './lib/examples.mjs';
 import { searchPitfalls } from './lib/pitfalls.mjs';
 import { readGuide, sliceGuide, guideChapters, guideFile, GUIDE_PATH } from './lib/guide.mjs';
+import { readApi, parseApi, searchApi, apiSummary, apiFile, API_PATH } from './lib/api.mjs';
 import { parseSizes, screenshotSource } from './lib/screenshot.mjs';
 import { resolveSamplesControls, resolveA2UI5, resolveViewCheck, resolveSamples, resolveAppTemplate, importViewCheck, resolveLintConfig, SERVER_ROOT } from './lib/repos.mjs';
 import { scaffold, validClassName, templateFiles, SPEC_FILE } from './lib/scaffold.mjs';
@@ -284,6 +285,45 @@ async function handle(name, args = {}, ctx = {}) {
         next: 'write these files, then `npm install` and `npm run check` (abaplint + the abap2UI5-linter). '
           + 'The app class is a working starting point: read app_guide before changing it.',
       });
+    }
+    case 'api_reference': {
+      // the client API is an interface in the framework sources
+      const miss = missingSibling('abap2UI5');
+      if (miss) return miss;
+      const raw = readApi();
+      if (raw === null) {
+        return toolError(`the abap2UI5 checkout has no ${API_PATH.join('/')} (looked in ${apiFile()}) — `
+          + 'update it (git pull); the client API lives there');
+      }
+      const kind = args.kind || 'all';
+      if (!['methods', 'constants', 'types', 'all'].includes(kind)) {
+        return toolError(`unknown kind '${kind}' — use methods, constants, types or all`);
+      }
+      const parsed = parseApi(raw);
+      // empty groups are omitted rather than sent as [], so a narrowed answer
+      // is exactly as wide as what it found
+      const pick = (r) => ({
+        ...(kind !== 'constants' && kind !== 'types' && r.methods.length ? { methods: r.methods } : {}),
+        ...(kind !== 'methods' && kind !== 'types' && r.constants.length ? { constants: r.constants } : {}),
+        ...(kind !== 'methods' && kind !== 'constants' && r.types.length ? { types: r.types } : {}),
+      });
+      if (!args.query) {
+        return text({
+          source: 'abap2UI5/' + API_PATH.join('/'),
+          about: 'z2ui5_if_client — the complete API an app may call on `client`',
+          ...pick(apiSummary(parsed)),
+          hint: 'pass `query` (keywords) for the matching methods/constants/types in full — signature, defaults, documentation',
+        });
+      }
+      const found = pick(searchApi(parsed, args.query));
+      const total = (found.methods?.length || 0) + (found.constants?.length || 0) + (found.types?.length || 0);
+      if (!total) {
+        return text({
+          matches: 0,
+          hint: `nothing in z2ui5_if_client matches "${args.query}" — call without arguments for the compact list of every method and constant group`,
+        });
+      }
+      return text({ matches: total, source: 'abap2UI5/' + API_PATH.join('/'), ...found });
     }
     case 'generation_rules': {
       const miss = missingSibling('samples-controls');

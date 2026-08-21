@@ -49,9 +49,9 @@ A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool returns a uniform, actionable
 error — which repo, how to clone it, which env var; see `missingSibling` in
 `server.mjs`) — `validate_view`/`screenshot_view` need the linter,
-`run_app`/`backend` need the core repo (and so do `pitfalls` and `app_guide`,
-whose documents are maintained beside the framework sources), almost
-everything else needs samples-controls. The README used to call the linter
+`run_app`/`backend` need the core repo (and so do `pitfalls`, `app_guide` and
+`api_reference`, whose documents and interface are maintained beside the
+framework sources), almost everything else needs samples-controls. The README used to call the linter
 "optional" — true for every tool but the two that ARE the fast loop, and
 therefore the wrong word; its tool table now carries a **Needs** column naming
 the sibling each tool is dead without, and that column must keep saying what
@@ -92,7 +92,11 @@ changes upstream, this repo must change in the same breath:
   catalogues, and **`docs/agents/building-apps.md`** — the app-building guide
   `app_guide` serves. Its `## ` headings are the chapters that tool slices on;
   a rename of the file is a broken tool here (reported, not silent — the tool
-  names the path it looked in).
+  names the path it looked in). **`src/02/z2ui5_if_client.intf.abap`** is
+  load-bearing the same way: `api_reference` parses it live (`lib/api.mjs` —
+  methods, `cs_*` constants, types, the ABAP-Doc and inline notes), relying on
+  the abaplint-pinned formatting; a move of the file is reported by path, and
+  a formatting change upstream is a parser change here.
 - app-template: **`template.json`** — the template's own description of what a
   project takes from it (the placeholder class, `files.shared` / `files.named`,
   and the substitutions that make them somebody's). `lib/scaffold.mjs` EXECUTES
@@ -148,7 +152,7 @@ importing it in a test hangs the run rather than failing it — which is why
 it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 14 tools,
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 15 tools,
 a capabilities query) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
@@ -166,7 +170,7 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 14 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 15 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
 table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`

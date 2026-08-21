@@ -168,6 +168,24 @@ test(`stdio smoke: initialize, ${TOOL_NAMES.length} tools, a capabilities query`
       assert.match(g.sections[0].heading, /^1\./);
       assert.ok(g.chapters.length > 3, `the whole table of contents comes back with it: ${g.chapters}`);
       assert.ok(g.sections[0].body.length > 100, 'a chapter arrives with its text, not just its name');
+
+      /* The client API, from the real interface: a queried method must arrive
+       * as a signature (parameters, defaults) and not as prose alone. */
+      send({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'api_reference', arguments: { query: 'follow_up_action' } } });
+      const apiRes = (await until((m) => m.id === 9, 15000)).result;
+      assert.ok(!apiRes.isError, `api_reference errored: ${apiRes.content[0].text}`);
+      const api = JSON.parse(apiRes.content[0].text);
+      const fua = (api.methods || []).find((m) => m.name === 'follow_up_action');
+      assert.ok(fua, `follow_up_action must be found: ${apiRes.content[0].text.slice(0, 200)}`);
+      assert.ok(fua.parameters.some((p) => p.name === 't_arg'), 'the signature comes with its parameters');
+      assert.ok(fua.doc.length > 200, 'the ABAP-Doc comes with the method');
+
+      // and the no-argument call is the compact surface, not the whole text
+      send({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'api_reference', arguments: {} } });
+      const apiAll = JSON.parse((await until((m) => m.id === 10, 15000)).result.content[0].text);
+      assert.ok(apiAll.methods.length > 20, 'every method is listed');
+      assert.ok(apiAll.constants.some((c) => c.name === 'cs_event'), 'the constant groups are listed');
+      assert.ok(apiAll.methods.some((m) => m.obsolete), 'obsolete methods are marked, not hidden');
     }
   } finally {
     p.kill();

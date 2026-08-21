@@ -9,6 +9,7 @@ import { parseExamples, searchExamples, CATALOGUES } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import { sliceGuide, guideChapters } from '../lib/guide.mjs';
+import { parseApi, searchApi, apiSummary } from '../lib/api.mjs';
 import { parseSizes } from '../lib/screenshot.mjs';
 import { scaffold, validClassName, templateFiles, readSpec } from '../lib/scaffold.mjs';
 import fs from 'node:fs';
@@ -610,6 +611,150 @@ test('a guide query narrows to whole chapters that carry every term', () => {
   assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip' }).map((s) => s.heading), ['5. Events']);
   // AND, like every other search here
   assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip popup' }), []);
+});
+
+// ------------------------------------------------------------------ api ----
+/* The client API (z2ui5_if_client), parsed from a fixture that carries every
+ * shape the real interface uses: single-line and multi-line METHODS, ABAP-Doc
+ * with @parameter blocks, inline " notes on parameters and constant entries,
+ * nested cs_* groups, TYPES with their doc INSIDE the block. The real file is
+ * in the abap2UI5 checkout; the parsing must not need it. */
+
+const API_FIXTURE = `INTERFACE z2ui5_if_client
+  PUBLIC.
+
+  CONSTANTS:
+    BEGIN OF cs_device,
+      BEGIN OF system,
+        phone   TYPE string VALUE \`phone\`,
+        desktop TYPE string VALUE \`desktop\`,
+      END OF system,
+    END OF cs_device.
+
+  CONSTANTS:
+    BEGIN OF cs_event,
+      start_timer TYPE string VALUE \`START_TIMER\`,
+      "obsolet
+      z2ui5       TYPE string VALUE \`Z2UI5\`,
+    END OF cs_event.
+
+  CONSTANTS:
+    "! Hash-based routing modes - the doc sits INSIDE the block here.
+    BEGIN OF cs_nav_mode,
+      default TYPE string VALUE \`DEFAULT\`,
+    END OF cs_nav_mode.
+
+  TYPES:
+    "! Everything the frontend sent with this roundtrip.
+    BEGIN OF ty_s_get,
+      event TYPE string,
+    END OF ty_s_get.
+
+  METHODS view_destroy.
+
+  "! Display the MAIN view. A new main view is a new screen.
+  METHODS view_display
+    IMPORTING
+      val TYPE clike.
+
+  "! obsolete - does NOTHING. It stays so existing apps keep compiling.
+  METHODS view_model_update.
+
+  "! @parameter omit_initial | keep INITIAL fields out of the model
+  "!                           instead of sending them as \`\` / 0
+  METHODS _bind
+    IMPORTING
+      val                  TYPE data
+      "obsolete - inactive, not passed on internally
+      view                 TYPE clike     DEFAULT cs_view-main
+      omit_initial         TYPE abap_bool DEFAULT abap_false
+      tab_index            TYPE i         OPTIONAL
+    RETURNING
+      VALUE(result)        TYPE string.
+
+  METHODS nav_app_leave
+    IMPORTING
+      VALUE(app)    TYPE REF TO z2ui5_if_app OPTIONAL
+      event         TYPE clike               OPTIONAL
+        PREFERRED PARAMETER app
+    RETURNING
+      VALUE(result) TYPE string.
+
+ENDINTERFACE.
+`;
+
+test('the client API parses into methods, constants and types', () => {
+  const p = parseApi(API_FIXTURE);
+  assert.deepEqual(p.methods.map((m) => m.name),
+    ['view_destroy', 'view_display', 'view_model_update', '_bind', 'nav_app_leave']);
+  assert.deepEqual(p.constants.map((c) => c.name), ['cs_device', 'cs_event', 'cs_nav_mode']);
+  assert.deepEqual(p.types.map((t) => t.name), ['ty_s_get']);
+
+  const display = p.methods.find((m) => m.name === 'view_display');
+  assert.match(display.doc, /new main view is a new screen/);
+  assert.deepEqual(display.parameters, [{ name: 'val', kind: 'importing', type: 'clike' }]);
+
+  // nesting flattens to the path an app actually writes
+  assert.deepEqual(p.constants[0].values.map((v) => v.path),
+    ['cs_device-system-phone', 'cs_device-system-desktop']);
+  // a doc INSIDE the CONSTANTS/TYPES block still documents the group
+  assert.match(p.constants[2].doc, /INSIDE the block/);
+  assert.match(p.types[0].doc, /frontend sent/);
+  assert.match(p.types[0].definition, /event TYPE string/);
+});
+
+test('obsolete methods and tagged constants are marked, never hidden', () => {
+  const p = parseApi(API_FIXTURE);
+  // the obsolete half of the interface exists so old apps compile - an agent
+  // must SEE it (to read old code) and see it marked (to not write new calls)
+  assert.equal(p.methods.find((m) => m.name === 'view_model_update').obsolete, true);
+  assert.equal(p.methods.find((m) => m.name === 'view_display').obsolete, false);
+  const ev = p.constants.find((c) => c.name === 'cs_event');
+  assert.equal(ev.values.find((v) => v.path === 'cs_event-z2ui5').note, 'obsolet');
+  assert.equal(ev.values.find((v) => v.path === 'cs_event-start_timer').note, undefined);
+});
+
+test('a parameter carries its default, its optionality and its own doc', () => {
+  const bind = parseApi(API_FIXTURE).methods.find((m) => m.name === '_bind');
+  const by = Object.fromEntries(bind.parameters.map((x) => [x.name, x]));
+  assert.equal(by.view.default, 'cs_view-main');
+  // the inline " note above a parameter is that parameter's documentation
+  assert.match(by.view.doc, /obsolete - inactive/);
+  // an @parameter block reaches the parameter it names, wrapped lines joined
+  assert.match(by.omit_initial.doc, /keep INITIAL fields out of the model instead/);
+  assert.equal(by.tab_index.optional, true);
+  assert.equal(by.result.kind, 'returning');
+
+  const nav = parseApi(API_FIXTURE).methods.find((m) => m.name === 'nav_app_leave');
+  assert.equal(nav.parameters.find((x) => x.name === 'app').preferred, true);
+  assert.equal(nav.parameters.find((x) => x.name === 'app').type, 'REF TO z2ui5_if_app');
+});
+
+test('an API query is AND-ed and returns whole entries', () => {
+  const p = parseApi(API_FIXTURE);
+  const timer = searchApi(p, 'timer');
+  assert.deepEqual(timer.constants.map((c) => c.values.map((v) => v.path)).flat(), ['cs_event-start_timer']);
+  assert.deepEqual(timer.methods, []);
+  // a method hit comes back with ALL its parameters, not the matching one
+  const omit = searchApi(p, 'omit initial');
+  assert.deepEqual(omit.methods.map((m) => m.name), ['_bind']);
+  assert.equal(omit.methods[0].parameters.length, 5);
+  // AND: a second term that matches nothing removes the hit
+  assert.deepEqual(searchApi(p, 'timer omit').constants, []);
+  // a group whose NAME matches returns the whole group
+  assert.equal(searchApi(p, 'cs_device').constants[0].values.length, 2);
+});
+
+test('the API parser reports, never throws, on a damaged interface', () => {
+  for (let i = 0; i <= 40; i++) {
+    const cut = API_FIXTURE.slice(0, Math.floor((API_FIXTURE.length * i) / 40));
+    assert.doesNotThrow(() => parseApi(cut), `parseApi threw on a ${i}/40 truncation`);
+    assert.doesNotThrow(() => apiSummary(parseApi(cut)), `apiSummary threw on a ${i}/40 truncation`);
+    assert.doesNotThrow(() => searchApi(parseApi(cut), 'timer'), `searchApi threw on a ${i}/40 truncation`);
+  }
+  for (const bad of ['', 'METHODS', 'CONSTANTS:', 'TYPES:', '"! doc for nothing', 'BEGIN OF x,']) {
+    assert.doesNotThrow(() => parseApi(bad), `parseApi threw on ${JSON.stringify(bad)}`);
+  }
 });
 
 // ---------------------------------------------------------- screenshot ----
