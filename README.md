@@ -78,7 +78,7 @@ checkout is missing answers with the clone command and env var that fix it.
 | `app_guide` | How to build an app, live from the framework checkout | abap2UI5 |
 | `api_reference` | The client API (`z2ui5_if_client`) with its ABAP-Doc: methods, parameters, defaults, the `cs_*` constants | abap2UI5 |
 | `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included | app-template |
-| `examples` | Search the three sample catalogues — answers with a class to read, never a snippet to trust | any of samples / samples-controls / samples-stack |
+| `examples` | Search the three sample catalogues, verification status and all — answers with a class to read, never a snippet to trust | any of samples / samples-controls / samples-stack |
 | `docs_search` | Full-text search over the documentation site's pages: page, heading, snippet and the published URL | docs |
 | `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls | samples-controls |
 | `pitfalls` | The defects a green run does not catch: `{ area: "abap" }` and `{ area: "view" }` | abap2UI5 |
@@ -93,7 +93,12 @@ checkout is missing answers with the clone command and env var that fix it.
 
 `examples` degrades per catalogue instead of failing: it searches the
 checkouts it finds and names the ones it could not, so a thinner answer never
-reads as "nobody has built this". `screenshot_view` and `run_app` answer the
+reads as "nobody has built this". It reads each repository's committed
+`catalogue.json` where the checkout has one — which is what carries a control
+port's verification status (checked over reviewed over generated, used to
+break ranking ties), the learning-path stage, and what a stack sample needs
+from the system — and falls back to parsing `SAMPLES.md` on a checkout from
+before that file existed. `screenshot_view` and `run_app` answer the
 same question at three orders of magnitude apart: the first photographs the
 reconstructed **view** with no backend, the second the **running app** after a
 build. Most iterations should end at the first.

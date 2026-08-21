@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripJsonc, BENIGN, deployApp, removeApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
-import { parseExamples, searchExamples, CATALOGUES } from '../lib/examples.mjs';
+import { parseExamples, searchExamples, catalogueEntries, CATALOGUES } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import { sliceGuide, guideChapters } from '../lib/guide.mjs';
@@ -563,6 +563,248 @@ test('a bold row header without a dash after it is still the title', () => {
   // and the dashed shape the other two catalogues use is untouched
   const [dashed] = parseExamples(SAMPLES_MD_WITH_SUMMARY);
   assert.equal(dashed.label, 'Value Help: Suggestions and F4 Dialog');
+});
+
+/* The committed catalogue.json each sample repository carries now - richer
+ * than the page (verification status, deviations, the learning-path stage,
+ * what a stack sample needs) and DIFFERENT per repository, so each shape is
+ * pinned by its own fixture. The adapters must fold all three into the entry
+ * shape the row parser produces: one search, one ranking, one result shape
+ * regardless of which file a checkout has. */
+
+const CAT_SAMPLES = {
+  samples: [
+    {
+      class: 'z2ui5_cl_smp_app_493',
+      file: 'src/01/z2ui5_cl_smp_app_493.clas.abap',
+      category: 'Basics',
+      stage: 'start',
+      title: 'Basics I',
+      description: 'Hello World, the Smallest App',
+      summary: 'The smallest app that runs.',
+      keywords: ['hello', 'world', 'minimal'],
+      docs: ['https://abap2ui5.github.io/docs/get_started/hello_world'],
+    },
+    {
+      class: 'z2ui5_cl_smp_app_454',
+      file: 'src/01/z2ui5_cl_smp_app_454.clas.abap',
+      category: 'List',
+      stage: 'rows',
+      title: 'List', // === category: the page drops such a header, so must the label
+      description: 'Filter and Sort the Binding from ABAP',
+      summary: 'Sorts a bound list from ABAP.',
+      keywords: ['sorter', 'filter'],
+      docs: [],
+    },
+  ],
+};
+
+const CAT_CONTROLS = {
+  ports: [
+    {
+      class: 'z2ui5_cl_smpc_app_003',
+      file: 'src/01/01/z2ui5_cl_smpc_app_003.clas.abap',
+      category: 'src/01',
+      library: 'sap.m',
+      sample: 'sap.m.sample.Breadcrumbs',
+      entity: 'sap.m.Breadcrumbs',
+      title: 'Breadcrumbs sample',
+      summary: 'Breadcrumbs displays a link hierarchy.',
+      keywords: 'breadcrumbs sap.m trail', // one string here, not an array
+      status: 'checked',
+      deviations: ['NOTE'],
+    },
+    {
+      class: 'z2ui5_cl_smpc_sapui5_001',
+      file: 'src/03/z2ui5_cl_smpc_sapui5_001.clas.abap',
+      category: 'src/03',
+      library: 'sap.suite.ui.microchart',
+      sample: '',
+      entity: '', // the src/03 collection has no demo-kit original
+      title: 'sap.suite.ui.microchart - InteractiveDonutChart',
+      summary: 'A SAPUI5-only control, orientation rather than a 1:1 port.',
+      keywords: 'interactivedonutchart',
+      status: 'collection',
+      deviations: [],
+    },
+  ],
+};
+
+const CAT_STACK = {
+  samples: [
+    {
+      class: 'Z2UI5_CL_SMPS_APP_315',
+      path: 'src/01/z2ui5_cl_smps_app_315.clas.abap',
+      package: 'src/01',
+      technology: 'OData',
+      title: 'Two Models in One View',
+      summary: 'one table bound to each',
+      keywords: ['odata', 'model'],
+      needs: 'an activated OData V2 service',
+    },
+  ],
+};
+
+test('samples catalogue.json adapts to the row shape, stage and docs included', () => {
+  const [hello, list] = catalogueEntries(CAT_SAMPLES, 'samples');
+  assert.equal(hello.cls, 'Z2UI5_CL_SMP_APP_493', 'the class name is upper-cased like the page renders it');
+  assert.equal(hello.section, 'Basics');
+  assert.equal(hello.label, 'Basics I — Hello World, the Smallest App');
+  assert.equal(hello.keywords, 'hello world minimal', 'array keywords become the one searchable string');
+  assert.equal(hello.area, 'samples');
+  assert.equal(hello.stage, 'start');
+  // a bare URL becomes the { topic, url } pair the row parser returns
+  assert.deepEqual(hello.docs, [{
+    topic: 'get_started/hello_world',
+    url: 'https://abap2ui5.github.io/docs/get_started/hello_world',
+  }]);
+  // a title that just repeats its category must not lead the label -
+  // the page drops such a header and the two paths have to agree
+  assert.equal(list.label, 'Filter and Sort the Binding from ABAP');
+  assert.equal(list.title, 'List');
+});
+
+test('samples-controls catalogue.json leads with the entity and keeps the verification status', () => {
+  const [bc, donut] = catalogueEntries(CAT_CONTROLS, 'samples-controls');
+  // the entity is what an agent asks for - and unlike the SAMPLES.md rows,
+  // the JSON carries it for every port
+  assert.equal(bc.title, 'sap.m.Breadcrumbs');
+  assert.equal(bc.label, 'sap.m.Breadcrumbs — Breadcrumbs sample');
+  assert.equal(bc.section, 'sap.m');
+  assert.equal(bc.status, 'checked');
+  assert.deepEqual(bc.deviations, ['NOTE']);
+  assert.equal(bc.area, 'samples-controls');
+  // src/03 has no entity: the title already names the control
+  assert.equal(donut.title, 'sap.suite.ui.microchart - InteractiveDonutChart');
+  assert.equal(donut.status, 'collection');
+  assert.equal(donut.deviations, undefined, 'an empty deviation list is omitted, not shipped');
+});
+
+test('samples-stack catalogue.json exposes technology and what the system must provide', () => {
+  const [e] = catalogueEntries(CAT_STACK, 'samples-stack');
+  assert.equal(e.cls, 'Z2UI5_CL_SMPS_APP_315');
+  assert.equal(e.section, 'OData');
+  assert.equal(e.technology, 'OData');
+  assert.equal(e.needs, 'an activated OData V2 service');
+  assert.equal(e.label, 'Two Models in One View');
+  assert.equal(e.area, 'samples-stack');
+});
+
+/* The fallback contract: anything that is not that repository's catalogue -
+ * a truncated file, a foreign JSON, a future shape - answers null so the
+ * caller reads SAMPLES.md instead. An empty ARRAY is not null: that is a
+ * catalogue asserting there are no samples. */
+test('a JSON that is not the catalogue answers null, never a throw', () => {
+  for (const bad of [null, 'text', 42, [], {}, { samples: 'not-a-list' }, { ports: {} }]) {
+    assert.equal(catalogueEntries(bad, 'samples'), null, JSON.stringify(bad));
+  }
+  assert.equal(catalogueEntries({ samples: [] }, 'samples')?.length, 0);
+  // a damaged entry inside an otherwise healthy list is skipped, not fatal
+  const some = catalogueEntries({ samples: [null, 'x', {}, CAT_SAMPLES.samples[0]] }, 'samples');
+  assert.equal(some.length, 1);
+});
+
+test('a verified port outranks an unverified one when the relevance ties', () => {
+  /* Same keyword hit on every port, statuses deliberately in the wrong order
+   * in the file - between two equally relevant ports, the one a human has
+   * watched run is the better class to copy from. */
+  const mixed = {
+    ports: ['generated', 'checked', 'reviewed'].map((status, i) => ({
+      class: `z2ui5_cl_smpc_app_00${i}`,
+      file: `src/01/01/z2ui5_cl_smpc_app_00${i}.clas.abap`,
+      category: 'src/01',
+      library: 'sap.m',
+      entity: `sap.m.Gadget${i}`,
+      title: `Gadget ${i}`,
+      summary: 'a gadget',
+      keywords: 'gadget sap.m',
+      status,
+      deviations: [],
+    })),
+  };
+  const hits = searchExamples({ query: 'gadget', repo: 'samples-controls', rawCatalogue: mixed });
+  assert.deepEqual(hits.map((e) => e.status), ['checked', 'reviewed', 'generated']);
+  /* Ranked, not filtered: the status only breaks ties. A query that names
+   * the unverified port still finds it - and finds it first. */
+  const named = searchExamples({ query: 'gadget0', repo: 'samples-controls', rawCatalogue: mixed });
+  assert.equal(named[0].title, 'sap.m.Gadget0');
+  assert.equal(named[0].status, 'generated');
+});
+
+/* Which FILE answers, pinned against a checkout on disk: catalogue.json where
+ * the checkout has one, SAMPLES.md where it does not (an older checkout is
+ * exactly that, and must keep working untouched), SAMPLES.md again when the
+ * JSON is mid-pull garbage - and for `samples` the page's src/00 rows merged
+ * IN beside the JSON, because its catalogue deliberately covers src/01 only
+ * and the experimental area must not vanish with the upgrade. */
+test('catalogue.json is preferred, SAMPLES.md is the fallback and the src/00 supplement', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-cat-'));
+  const nowhere = path.join(base, 'not-checked-out');
+  const home = path.join(base, 'samples');
+  fs.mkdirSync(home, { recursive: true });
+  // SAMPLES.md is the samples probe, so every checkout shape carries it
+  fs.writeFileSync(path.join(home, 'SAMPLES.md'), [
+    '## Basics',
+    '',
+    '| Sample | Class |',
+    '|---|---|',
+    '| **Basics I** — Hello World<br><sub>page keywords</sub> | [`Z2UI5_CL_SMP_APP_493`](src/01/z2ui5_cl_smp_app_493.clas.abap) |',
+    '| Playground<br><sub>experimental thing</sub> | [`Z2UI5_CL_SMP_APP_321`](src/00/97/z2ui5_cl_smp_app_321.clas.abap) |',
+  ].join('\n'));
+  const query = () => JSON.parse(execFileSync(process.execPath, ['-e',
+    "import('./lib/examples.mjs').then(m => process.stdout.write(JSON.stringify({"
+    + 'entries: m.parseExamples(), summary: m.exampleSummary() })))'],
+  {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SAMPLES_HOME: home,
+      // authoritative misses: a set env var pointing nowhere resolves to null
+      SAMPLES_CONTROLS_HOME: nowhere,
+      AI_DEMOKIT_HOME: nowhere,
+      SAMPLES_STACK_HOME: nowhere,
+    },
+  }));
+  try {
+    // no catalogue.json: the row parser answers alone, as it always has
+    let r = query();
+    assert.equal(r.summary.sources.samples, 'SAMPLES.md');
+    assert.deepEqual(r.entries.map((e) => e.cls), ['Z2UI5_CL_SMP_APP_493', 'Z2UI5_CL_SMP_APP_321']);
+    assert.equal(r.entries[0].stage, undefined);
+
+    // with catalogue.json: the JSON wins for the classes it carries (the
+    // stage proves which file answered), the page still carries src/00
+    fs.writeFileSync(path.join(home, 'catalogue.json'), JSON.stringify({
+      samples: [{
+        class: 'z2ui5_cl_smp_app_493',
+        file: 'src/01/z2ui5_cl_smp_app_493.clas.abap',
+        category: 'Basics',
+        stage: 'start',
+        title: 'Basics I',
+        description: 'Hello World, the Smallest App',
+        summary: 'The smallest app that runs.',
+        keywords: ['hello', 'world'],
+        docs: [],
+      }],
+    }));
+    r = query();
+    assert.equal(r.summary.sources.samples, 'catalogue.json');
+    assert.deepEqual(r.entries.map((e) => e.cls), ['Z2UI5_CL_SMP_APP_493', 'Z2UI5_CL_SMP_APP_321']);
+    assert.equal(r.entries[0].stage, 'start', 'the class both files carry is answered from the JSON');
+    assert.equal(r.entries[1].area, 'experimental-or-test', 'the page-only src/00 row survives the upgrade');
+
+    // a catalogue.json that does not parse (mid-pull) falls back to the page
+    fs.writeFileSync(path.join(home, 'catalogue.json'), '{ "samples": [ trunca');
+    r = query();
+    assert.deepEqual(r.entries.map((e) => e.cls), ['Z2UI5_CL_SMP_APP_493', 'Z2UI5_CL_SMP_APP_321']);
+    assert.equal(r.entries[0].stage, undefined, 'the damaged JSON answered nothing - the page did');
+
+    // and the absent catalogues are still named, not silently dropped
+    assert.equal(r.summary.notSearched.length, 2);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });
 
 // --------------------------------------------------------------- guide ----

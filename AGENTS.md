@@ -34,10 +34,10 @@ is no silent fallback to the sibling guess.
 
 | Env var | Default sibling | Used for |
 | --- | --- | --- |
-| `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
+| `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `catalogue.json` + `SAMPLES.md` (the control catalogue `examples` searches), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
 | `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/`, `.claude/skills/{abap-check,ui5-check}/SKILL.md` (`pitfalls`), `docs/agents/building-apps.md` (`app_guide`) |
-| `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `SAMPLES.md` — one of the three catalogues `examples` searches |
-| `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `SAMPLES.md` — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
+| `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `catalogue.json` (preferred) + `SAMPLES.md` (fallback, and the src/00 area) — one of the three catalogues `examples` searches |
+| `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `catalogue.json` (preferred) + `SAMPLES.md` (fallback) — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
 | `DOCS_HOME` | `../docs` | `docs/**/*.md` — the documentation site's sources, searched live by `docs_search` |
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view` + `screenshot_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config`, `./rule-docs` (via `importViewCheck`) |
 
@@ -70,14 +70,32 @@ It answers from what it can read, names what it could not under
 These upstream file names/shapes are load-bearing for mcp-server. When one
 changes upstream, this repo must change in the same breath:
 
-- samples, samples-controls, samples-stack: the `SAMPLES.md` **row shape** —
+- samples, samples-controls, samples-stack: **`catalogue.json`**, the
+  machine-readable catalogue all three commit at repo root — the file
+  `examples` PREFERS when a checkout has it. The three shapes differ per
+  repository and each is load-bearing: samples' `samples[]` (class, file,
+  category, learning-path `stage`, keywords as an array, docs as bare URLs),
+  samples-controls' `ports[]` (entity, library, upstream sample id,
+  verification `status` checked/reviewed/generated/collection, `deviations`,
+  keywords as one string), samples-stack's `samples[]` (package, `technology`,
+  `needs`, keywords as an array). One adapter per repository
+  (`lib/examples.mjs` `catalogueEntries`) folds them into the single entry
+  shape the row parser produces; a shape change upstream is a change here. A
+  JSON that does not parse falls back to the page below, never to an error.
+- the same three repos: the `SAMPLES.md` **row shape** —
   `| **title** — sub<br>summary<br><sub>keywords</sub> | [`CLASS`](path) |`.
   All three generate it identically and one parser reads all three
   (`lib/examples.mjs`), so a change to it in any of them is a change here. The
   parser matches the `<br>` blocks as a GROUP and classifies them afterwards
   rather than expecting a fixed sequence — twice now a new block would
   otherwise have made every row unmatchable, and that failure reads as "there
-  are no samples for that" rather than as an error.
+  are no samples for that" rather than as an error. This parser is NOT
+  superseded by catalogue.json: it is the whole answer on a checkout from
+  before that file existed (which must keep working untouched — that IS the
+  compatibility surface), and on a current `samples` checkout it still
+  carries the src/00 experimental/test area, which samples' catalogue.json
+  deliberately leaves to the page — `examples` merges those rows in so the
+  `area: experimental-or-test` filter keeps answering.
 - samples-controls: `CAPABILITIES.md` **table format** (4 columns, status emoji —
   parser + legend in `lib/capabilities.mjs`), `scripts/generation-prompt.txt`,
   `scripts/scope-of.mjs` CLI output, `scripts/e2e-build.mjs`, `abaplint.jsonc`,
