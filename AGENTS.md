@@ -102,10 +102,11 @@ changes upstream, this repo must change in the same breath:
   the `src/zz_dev/` package convention.
 - samples-controls' SAMPLES.md carries its row header entirely in bold with no
   dash after it (`| **sap.m.Bar**<br>…`), which is the shape the row pattern
-  had to learn; and 241 of its 430 rows carry only the LIBRARY there
-  (`| **sap.m**<br>…`) rather than the control. That is an upstream generator
-  gap, not a parser one — those ports come back titled by their library, and
-  the fix belongs in samples-controls' `generate-samples-md`.
+  had to learn. 241 of its 430 rows used to carry only the LIBRARY there
+  (`| **sap.m**<br>…`) rather than the control — an upstream generator gap,
+  fixed in samples-controls' `generate-samples-md` (rows now lead with the
+  control entity, `| **sap.ui.table.Table** — Basic<br>…`); the row pattern
+  reads both the old and the fixed shape, so pre-fix checkouts keep working.
 - abap2UI5 core: `node/srv/express.mjs`, `node/setup/abap_transpile.json`,
   `node/downport/`, `node/output/init.mjs`, the two `.claude/skills/*-check/`
   catalogues, and **`docs/agents/building-apps.md`** — the app-building guide
