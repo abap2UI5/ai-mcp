@@ -122,6 +122,23 @@ tool gives.
 | `abap2ui5://capabilities` | CAPABILITIES.md — the verified capability map | samples-controls |
 | `abap2ui5://generation-rules` | The rulebook for porting a UI5 demo-kit sample | samples-controls |
 
+## Prompts
+
+Two prompts — one per job this server serves — put an agent straight into the
+loop instead of leaving it to reconstruct the order from sixteen tool
+descriptions. Each renders an orchestration script over the tools above and
+duplicates none of their content:
+
+- **`build-an-abap2ui5-app`** (argument: `task`, what the app should do) —
+  orient with `examples`/`capabilities`, learn the shape from `app_guide`,
+  write the class, iterate through `validate_view`/`screenshot_view` in
+  seconds, prove it with `deploy_app` → `build_backend` → `run_app`, close
+  with `pitfalls`.
+- **`port-a-ui5-sample`** (argument: `sample`, the demo-kit sample) — the
+  corpus job: `generation_rules` as the brief, `scope_of` and `capabilities`
+  before writing, neighbouring ports from `examples`, then the same
+  validate/screenshot/deploy/run loop.
+
 ## Notes
 
 - **Dev sandbox:** deployed apps land in the samples-controls checkout's

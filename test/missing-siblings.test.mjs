@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOL_NAMES } from '../lib/tools.mjs';
 import { RESOURCE_URIS } from '../lib/resources.mjs';
+import { PROMPT_NAMES } from '../lib/prompts.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -186,6 +187,21 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
     expectMissingRead(await readErr('abap2ui5://pitfalls/view'), /abap2UI5 checkout not found/, 'A2UI5_HOME');
     expectMissingRead(await readErr('abap2ui5://capabilities'), CORPUS, 'SAMPLES_CONTROLS_HOME');
     expectMissingRead(await readErr('abap2ui5://generation-rules'), CORPUS, 'SAMPLES_CONTROLS_HOME');
+
+    /* The prompts read no checkout at all - they orchestrate the tools, which
+     * carry their own degradation. So with every sibling absent, listing and
+     * rendering both still work in full. */
+    send({ jsonrpc: '2.0', id: 4, method: 'prompts/list' });
+    const promptList = await until((m) => m.id === 4);
+    assert.deepEqual(promptList.result.prompts.map((pr) => pr.name).sort(), PROMPT_NAMES,
+      'the prompt list must not shrink when checkouts are missing');
+    send({
+      jsonrpc: '2.0', id: 5, method: 'prompts/get',
+      params: { name: 'port-a-ui5-sample', arguments: { sample: 'sap.m.Wizard' } },
+    });
+    const gotPrompt = await until((m) => m.id === 5);
+    assert.ok(!gotPrompt.error, `prompts/get must work without checkouts: ${JSON.stringify(gotPrompt.error)}`);
+    assert.ok(gotPrompt.result.messages[0].content.text.includes('sap.m.Wizard'));
   } finally {
     p.kill();
   }

@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveSamplesControls, resolveViewCheck, resolveA2UI5, resolveDocs } from '../lib/repos.mjs';
 import { TOOL_NAMES } from '../lib/tools.mjs';
 import { RESOURCE_URIS, GUIDE_CHAPTER_TEMPLATE } from '../lib/resources.mjs';
+import { PROMPT_NAMES } from '../lib/prompts.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -235,6 +236,34 @@ test(`stdio smoke: initialize, ${TOOL_NAMES.length} tools, a capabilities query`
       assert.ok(!chap.error, `reading a guide chapter errored: ${JSON.stringify(chap.error)}`);
       assert.match(chap.result.contents[0].text, /^## 1\./, 'the asked-for chapter, with its heading');
     }
+
+    /* The workflow prompts: the derived list from lib/prompts.mjs, and a get
+     * that renders the loop AROUND the task - orchestration over the existing
+     * tools, never their content. */
+    send({ jsonrpc: '2.0', id: 16, method: 'prompts/list' });
+    const promptList = (await until((m) => m.id === 16)).result;
+    assert.deepEqual(promptList.prompts.map((pr) => pr.name).sort(), PROMPT_NAMES);
+    for (const pr of promptList.prompts) {
+      assert.ok(pr.description && pr.arguments?.length, `prompt ${pr.name} must declare description and arguments`);
+    }
+
+    send({
+      jsonrpc: '2.0', id: 17, method: 'prompts/get',
+      params: { name: 'build-an-abap2ui5-app', arguments: { task: 'a flight table with a search field' } },
+    });
+    const got = await until((m) => m.id === 17);
+    assert.ok(!got.error, `prompts/get errored: ${JSON.stringify(got.error)}`);
+    const rendered = got.result.messages[0].content.text;
+    assert.ok(rendered.includes('a flight table with a search field'), 'the task lands in the rendered prompt');
+    for (const tool of ['examples', 'app_guide', 'validate_view', 'screenshot_view', 'deploy_app', 'build_backend', 'run_app', 'pitfalls']) {
+      assert.ok(rendered.includes(`\`${tool}\``), `the prompt must walk the loop through ${tool}`);
+    }
+
+    // a missing required argument is the get request's error, with the way out
+    send({ jsonrpc: '2.0', id: 18, method: 'prompts/get', params: { name: 'build-an-abap2ui5-app', arguments: {} } });
+    const noArg = await until((m) => m.id === 18);
+    assert.ok(noArg.error, 'a required argument left out must be a JSON-RPC error');
+    assert.match(noArg.error.message, /needs the argument 'task'/);
   } finally {
     p.kill();
   }

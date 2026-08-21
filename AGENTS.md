@@ -182,8 +182,9 @@ it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
 `test/smoke.test.mjs` boots the real server over stdio (initialize, 16 tools,
-a capabilities query, the resource list and a resource read) and **skips
-itself when the samples-controls sibling is absent**, so `npm test` is green in a bare checkout and exercises the full
+a capabilities query, the resource list and a resource read, the prompt list
+and a rendered prompt) and **skips itself when the samples-controls sibling is
+absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
 on every push/PR. Manual stdio driving, when a test is not enough:
 
@@ -240,6 +241,15 @@ legitimately slower.
   reaching the client as the read request's JSON-RPC error —
   `test/missing-siblings.test.mjs` pins both). The resources hand over the
   same documents the tools slice; nothing may be bundled or paraphrased here.
+- **The prompt surface: `lib/prompts.mjs`, two prompts, deliberately no
+  more** — `build-an-abap2ui5-app` and `port-a-ui5-sample`, one per job this
+  server serves (the same split app_guide vs generation_rules draws). A
+  prompt is an ORCHESTRATION script over the existing tools, never a copy of
+  what a tool serves — the gate renders both and fails when a prompt names a
+  tool the `TOOLS` array does not define, so a tool rename cannot leave a
+  stale prompt behind. Prompts read no sibling checkout (the tools they
+  point at carry the degradation), which `test/missing-siblings.test.mjs`
+  pins by rendering one with every env var pointed at nowhere.
 - **A tool description is the only documentation the agent reads.** It never
   sees this file, the README or a comment — it picks a tool from the sentence
   in `TOOLS`. So two tools that answer neighbouring questions have to say

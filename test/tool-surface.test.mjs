@@ -15,6 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TOOLS, TOOL_NAMES } from '../lib/tools.mjs';
 import { RESOURCES, RESOURCE_URIS, RESOURCE_TEMPLATES } from '../lib/resources.mjs';
+import { PROMPTS, PROMPT_NAMES } from '../lib/prompts.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -81,6 +82,47 @@ test('every written-out resource count matches the RESOURCES array', () => {
     for (const m of text.matchAll(/(\d+)\s+resources\b/g)) {
       assert.equal(Number(m[1]), RESOURCES.length,
         `${file} says "${m[0]}" but lib/resources.mjs defines ${RESOURCES.length} resources`);
+    }
+  }
+});
+
+/* And the prompt surface: one source (lib/prompts.mjs), checked against the
+ * documents that name it. A prompt orchestrates the EXISTING tools, so every
+ * tool a prompt sends the agent to must actually be in the TOOLS array — a
+ * renamed tool must fail here, not in an agent's session. */
+test('every prompt is declared in full and every prompt name in the README is real', () => {
+  assert.ok(PROMPTS.length >= 1 && PROMPTS.length <= 2, 'one or two prompts, deliberately no more');
+  const readme = read('README.md');
+  for (const p of PROMPTS) {
+    assert.match(p.name, /^[a-z][a-z0-9-]*$/, `prompt name '${p.name}' must be a lowercase identifier`);
+    assert.ok(p.description && p.description.length > 60, `'${p.name}' needs a real description, not a label`);
+    assert.ok(Array.isArray(p.arguments) && p.arguments.length, `'${p.name}' must declare its arguments`);
+    assert.ok(readme.includes(`\`${p.name}\``), `README.md must document the prompt '${p.name}'`);
+  }
+  assert.equal(new Set(PROMPT_NAMES).size, PROMPTS.length, 'prompt names must be unique');
+});
+
+test('every tool a rendered prompt names exists in the TOOLS array', async () => {
+  const { getPrompt } = await import('../lib/prompts.mjs');
+  const args = { 'build-an-abap2ui5-app': { task: 'x' }, 'port-a-ui5-sample': { sample: 'x' } };
+  for (const p of PROMPTS) {
+    const text = getPrompt(p.name, args[p.name]).messages.map((m) => m.content.text).join('\n');
+    const named = [...text.matchAll(/`([a-z][a-z0-9_]*)`/g)].map((m) => m[1]);
+    assert.ok(named.length > 4, `prompt '${p.name}' must actually orchestrate tools`);
+    for (const tool of named) {
+      if (tool === 'client' || tool === 'z2ui5_if_app') continue; // API names, not tools
+      assert.ok(TOOL_NAMES.includes(tool),
+        `prompt '${p.name}' sends the agent to '${tool}', which lib/tools.mjs does not define`);
+    }
+  }
+});
+
+test('every written-out prompt count matches the PROMPTS array', () => {
+  for (const file of ['README.md', 'AGENTS.md', 'server.mjs', 'CONTRIBUTING.md']) {
+    const text = read(file);
+    for (const m of text.matchAll(/(\d+)\s+prompts\b/g)) {
+      assert.equal(Number(m[1]), PROMPTS.length,
+        `${file} says "${m[0]}" but lib/prompts.mjs defines ${PROMPTS.length} prompts`);
     }
   }
 });

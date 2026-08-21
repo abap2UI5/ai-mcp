@@ -37,6 +37,8 @@ import {
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { searchCapabilities, capabilitySummary } from './lib/capabilities.mjs';
 import { searchExamples, exampleSummary, catalogueFiles } from './lib/examples.mjs';
@@ -49,6 +51,7 @@ import { searchDocs, docsRoot } from './lib/docs.mjs';
 import { scaffold, validClassName, templateFiles, SPEC_FILE } from './lib/scaffold.mjs';
 import { TOOLS } from './lib/tools.mjs';
 import { RESOURCES, RESOURCE_TEMPLATES, readResource } from './lib/resources.mjs';
+import { PROMPTS, getPrompt } from './lib/prompts.mjs';
 import { missingSiblingMessage } from './lib/siblings.mjs';
 import {
   deployApp,
@@ -601,7 +604,7 @@ const PKG = JSON.parse(fs.readFileSync(path.join(SERVER_ROOT, 'package.json'), '
 
 const server = new Server(
   { name: 'abap2ui5', version: PKG.version },
-  { capabilities: { tools: {}, resources: {} } },
+  { capabilities: { tools: {}, resources: {}, prompts: {} } },
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -613,6 +616,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: RESOURCES }));
 server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: RESOURCE_TEMPLATES }));
 server.setRequestHandler(ReadResourceRequestSchema, async (req) => readResource(req.params.uri));
+
+/* The two workflow prompts (lib/prompts.mjs): orchestration scripts over the
+ * existing tools — build-an-abap2ui5-app and port-a-ui5-sample. They read no
+ * sibling checkout; the tools they send the agent to do. */
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: PROMPTS }));
+server.setRequestHandler(GetPromptRequestSchema, async (req) => getPrompt(req.params.name, req.params.arguments || {}));
 server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
   try {
     return await handle(req.params.name, req.params.arguments || {}, {
