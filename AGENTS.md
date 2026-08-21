@@ -183,13 +183,17 @@ legitimately slower.
 
 ## Maintenance traps (learned, do not repeat)
 
-- The **tool list in the `server.mjs` header comment** is duplicated by hand
-  — update it when adding a tool (it has drifted before: a missing
-  `remove_app` row). The server `version` is read from `package.json` at
-  startup and asserted by the tests; the exact tool-name set is pinned in
-  `test/smoke.test.mjs` (`TOOL_NAMES`) and `test/missing-siblings.test.mjs`
-  — adding/renaming a tool must update those lists, and the COUNT is written
-  out in this file, in the README table and in the smoke test's name.
+- The **tool surface has one source: the `TOOLS` array in `lib/tools.mjs`.**
+  It used to be duplicated by hand in four places (the `server.mjs` header
+  comment, the README table, this file, the test name lists) and each copy
+  drifted in its own way — a missing `remove_app` row in the header, counts
+  that lagged a tool behind. Now the stdio suites import the derived
+  `TOOL_NAMES`, and `test/tool-surface.test.mjs` fails `npm test` when the
+  README table or any written-out "N tools" count in the prose stops matching
+  the array. Adding a tool therefore means: the array, its `handle` case, a
+  README table row — and the gate tells you about every count left behind.
+  The server `version` is read from `package.json` at startup and asserted by
+  the tests.
 - **A tool description is the only documentation the agent reads.** It never
   sees this file, the README or a comment — it picks a tool from the sentence
   in `TOOLS`. So two tools that answer neighbouring questions have to say

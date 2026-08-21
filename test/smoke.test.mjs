@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveSamplesControls, resolveViewCheck, resolveA2UI5 } from '../lib/repos.mjs';
+import { TOOL_NAMES } from '../lib/tools.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -22,25 +23,12 @@ const HAVE_A2UI5 = !!resolveA2UI5();
 const HAVE_RENDER_RUNTIME = HAVE_LINTER
   && fs.existsSync(path.join(resolveViewCheck(), 'node_modules', '@openui5', 'sap.m'));
 
-// the complete tool surface — a new/renamed/dropped tool must show up here
-export const TOOL_NAMES = [
-  'app_guide',
-  'backend',
-  'build_backend',
-  'capabilities',
-  'deploy_app',
-  'examples',
-  'generation_rules',
-  'pitfalls',
-  'remove_app',
-  'run_app',
-  'scaffold_app',
-  'scope_of',
-  'screenshot_view',
-  'validate_view',
-];
+/* The complete tool surface, DERIVED from the TOOLS array rather than kept as
+ * a copy here (this list was one of the four hand-duplicates AGENTS.md flagged
+ * as a drift trap). What this smoke still pins is that the running server
+ * serves exactly that array over stdio. */
 
-test('stdio smoke: initialize, 14 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
+test(`stdio smoke: initialize, ${TOOL_NAMES.length} tools, a capabilities query`, { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));

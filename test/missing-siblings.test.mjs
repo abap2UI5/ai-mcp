@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TOOL_NAMES } from '../lib/tools.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -83,11 +84,9 @@ test('every sibling-dependent tool degrades with an actionable error when the ch
 
     send({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const list = await until((m) => m.id === 2);
-    assert.deepEqual(
-      list.result.tools.map((t) => t.name).sort(),
-      ['app_guide', 'backend', 'build_backend', 'capabilities', 'deploy_app', 'examples', 'generation_rules',
-        'pitfalls', 'remove_app', 'run_app', 'scaffold_app', 'scope_of', 'screenshot_view', 'validate_view'],
-    );
+    // the derived list from lib/tools.mjs — the full surface stays served
+    // even when every sibling checkout is absent
+    assert.deepEqual(list.result.tools.map((t) => t.name).sort(), TOOL_NAMES);
 
     // samples-controls-backed tools
     const CORPUS = /samples-controls checkout not found/;
