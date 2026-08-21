@@ -64,27 +64,37 @@ that need a real SAP system.
 
 ## Tools
 
-| Tool | What it does |
-|---|---|
-| `capabilities` | Whether abap2UI5 can express a UI5 feature at all, from the verified capability map |
-| `app_guide` | How to build an app, live from the framework checkout |
-| `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included |
-| `examples` | Search the three sample catalogues — answers with a class to read, never a snippet to trust |
-| `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls |
-| `pitfalls` | The defects a green run does not catch: `{ area: "abap" }` and `{ area: "view" }` |
-| `scope_of` | In/out-of-scope verdict for a UI5 control |
-| `validate_view` | The linter's gates in seconds, judged by your project's own `abap2ui5lint.jsonc` |
-| `screenshot_view` | See the view in seconds — no build, no backend |
-| `deploy_app` | Write the class + abapGit sidecar into the gitignored sandbox, then abaplint it |
-| `build_backend` | Rebuild the transpiled Node backend; incremental after the first full build |
-| `run_app` | Boot an app headless: status, real page errors, and a **screenshot** |
-| `backend` | `status` / `start` / `stop` / `restart` of the local express backend |
-| `remove_app` | Delete a dev app from the sandbox, or list the deployed ones |
+Every tool reads live from a sibling checkout, and each one needs a specific
+sibling — there is no "optional" repository, only tools you do or do not use.
+The **Needs** column says which checkout a tool is dead without: the linter
+alone carries `validate_view` and `screenshot_view` (the fast loop, where most
+iterations happen), the framework checkout carries the guide, the pitfalls and
+the backend, and the corpus carries almost everything else. A tool whose
+checkout is missing answers with the clone command and env var that fix it.
 
-`screenshot_view` and `run_app` answer the same question at three orders of
-magnitude apart: the first photographs the reconstructed **view** with no
-backend, the second the **running app** after a build. Most iterations should
-end at the first.
+| Tool | What it does | Needs |
+|---|---|---|
+| `capabilities` | Whether abap2UI5 can express a UI5 feature at all, from the verified capability map | samples-controls |
+| `app_guide` | How to build an app, live from the framework checkout | abap2UI5 |
+| `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included | app-template |
+| `examples` | Search the three sample catalogues — answers with a class to read, never a snippet to trust | any of samples / samples-controls / samples-stack |
+| `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls | samples-controls |
+| `pitfalls` | The defects a green run does not catch: `{ area: "abap" }` and `{ area: "view" }` | abap2UI5 |
+| `scope_of` | In/out-of-scope verdict for a UI5 control | samples-controls + an OpenUI5 checkout |
+| `validate_view` | The linter's gates in seconds, judged by your project's own `abap2ui5lint.jsonc` | linter |
+| `screenshot_view` | See the view in seconds — no build, no backend | linter |
+| `deploy_app` | Write the class + abapGit sidecar into the gitignored sandbox, then abaplint it | samples-controls |
+| `build_backend` | Rebuild the transpiled Node backend; incremental after the first full build | samples-controls + abap2UI5 |
+| `run_app` | Boot an app headless: status, real page errors, and a **screenshot** | samples-controls + abap2UI5 |
+| `backend` | `status` / `start` / `stop` / `restart` of the local express backend | abap2UI5 (start/restart; status and stop always work) |
+| `remove_app` | Delete a dev app from the sandbox, or list the deployed ones | samples-controls |
+
+`examples` degrades per catalogue instead of failing: it searches the
+checkouts it finds and names the ones it could not, so a thinner answer never
+reads as "nobody has built this". `screenshot_view` and `run_app` answer the
+same question at three orders of magnitude apart: the first photographs the
+reconstructed **view** with no backend, the second the **running app** after a
+build. Most iterations should end at the first.
 
 ## Notes
 

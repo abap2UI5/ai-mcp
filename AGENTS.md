@@ -51,10 +51,12 @@ error — which repo, how to clone it, which env var; see `missingSibling` in
 `server.mjs`) — `validate_view`/`screenshot_view` need the linter,
 `run_app`/`backend` need the core repo (and so do `pitfalls` and `app_guide`,
 whose documents are maintained beside the framework sources), almost
-everything else needs samples-controls. The README calls the linter
-"optional"; that is true for 12 of the 14 tools and fatal for the two that ARE
-the fast loop. `test/missing-siblings.test.mjs` pins this contract per tool by
-pointing every env var at a nonexistent directory.
+everything else needs samples-controls. The README used to call the linter
+"optional" — true for every tool but the two that ARE the fast loop, and
+therefore the wrong word; its tool table now carries a **Needs** column naming
+the sibling each tool is dead without, and that column must keep saying what
+this section says. `test/missing-siblings.test.mjs` pins this contract per
+tool by pointing every env var at a nonexistent directory.
 
 `examples` is the ONE exception and deliberately so: it reads three
 catalogues, and one of them missing is not a reason to refuse the other two.
