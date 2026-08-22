@@ -51,6 +51,17 @@
       ],
       "probe": "abaplint.jsonc"
     },
+    "docs": {
+      "repository": "abap2UI5/docs",
+      "why": "The documentation site: the cookbook, the setup and configuration chapters, the advanced guides. docs_search reads its markdown sources; the published site serves the same pages rendered.",
+      "dirs": [
+        "docs"
+      ],
+      "env": [
+        "DOCS_HOME"
+      ],
+      "probe": "docs/index.md"
+    },
     "viewCheck": {
       "repository": "abap2UI5/linter",
       "why": "The abap2UI5 linter: the property and render gates, imported through its package.json exports map.",

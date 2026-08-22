@@ -5,10 +5,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stripJsonc, BENIGN, deployApp, removeApp } from '../lib/runtime.mjs';
 import { parseCapabilities, searchCapabilities } from '../lib/capabilities.mjs';
-import { parseExamples, searchExamples, CATALOGUES } from '../lib/examples.mjs';
+import { parseExamples, searchExamples, catalogueEntries, CATALOGUES } from '../lib/examples.mjs';
 import { CORPUS_DIRS, resolveLintConfig } from '../lib/repos.mjs';
 import { sliceCatalogue } from '../lib/pitfalls.mjs';
 import { sliceGuide, guideChapters } from '../lib/guide.mjs';
+import { parseApi, searchApi, apiSummary } from '../lib/api.mjs';
+import { searchDocs } from '../lib/docs.mjs';
 import { parseSizes } from '../lib/screenshot.mjs';
 import { scaffold, validClassName, templateFiles, readSpec } from '../lib/scaffold.mjs';
 import fs from 'node:fs';
@@ -563,6 +565,248 @@ test('a bold row header without a dash after it is still the title', () => {
   assert.equal(dashed.label, 'Value Help: Suggestions and F4 Dialog');
 });
 
+/* The committed catalogue.json each sample repository carries now - richer
+ * than the page (verification status, deviations, the learning-path stage,
+ * what a stack sample needs) and DIFFERENT per repository, so each shape is
+ * pinned by its own fixture. The adapters must fold all three into the entry
+ * shape the row parser produces: one search, one ranking, one result shape
+ * regardless of which file a checkout has. */
+
+const CAT_SAMPLES = {
+  samples: [
+    {
+      class: 'z2ui5_cl_smp_app_493',
+      file: 'src/01/z2ui5_cl_smp_app_493.clas.abap',
+      category: 'Basics',
+      stage: 'start',
+      title: 'Basics I',
+      description: 'Hello World, the Smallest App',
+      summary: 'The smallest app that runs.',
+      keywords: ['hello', 'world', 'minimal'],
+      docs: ['https://abap2ui5.github.io/docs/get_started/hello_world'],
+    },
+    {
+      class: 'z2ui5_cl_smp_app_454',
+      file: 'src/01/z2ui5_cl_smp_app_454.clas.abap',
+      category: 'List',
+      stage: 'rows',
+      title: 'List', // === category: the page drops such a header, so must the label
+      description: 'Filter and Sort the Binding from ABAP',
+      summary: 'Sorts a bound list from ABAP.',
+      keywords: ['sorter', 'filter'],
+      docs: [],
+    },
+  ],
+};
+
+const CAT_CONTROLS = {
+  ports: [
+    {
+      class: 'z2ui5_cl_smpc_app_003',
+      file: 'src/01/01/z2ui5_cl_smpc_app_003.clas.abap',
+      category: 'src/01',
+      library: 'sap.m',
+      sample: 'sap.m.sample.Breadcrumbs',
+      entity: 'sap.m.Breadcrumbs',
+      title: 'Breadcrumbs sample',
+      summary: 'Breadcrumbs displays a link hierarchy.',
+      keywords: 'breadcrumbs sap.m trail', // one string here, not an array
+      status: 'checked',
+      deviations: ['NOTE'],
+    },
+    {
+      class: 'z2ui5_cl_smpc_sapui5_001',
+      file: 'src/03/z2ui5_cl_smpc_sapui5_001.clas.abap',
+      category: 'src/03',
+      library: 'sap.suite.ui.microchart',
+      sample: '',
+      entity: '', // the src/03 collection has no demo-kit original
+      title: 'sap.suite.ui.microchart - InteractiveDonutChart',
+      summary: 'A SAPUI5-only control, orientation rather than a 1:1 port.',
+      keywords: 'interactivedonutchart',
+      status: 'collection',
+      deviations: [],
+    },
+  ],
+};
+
+const CAT_STACK = {
+  samples: [
+    {
+      class: 'Z2UI5_CL_SMPS_APP_315',
+      path: 'src/01/z2ui5_cl_smps_app_315.clas.abap',
+      package: 'src/01',
+      technology: 'OData',
+      title: 'Two Models in One View',
+      summary: 'one table bound to each',
+      keywords: ['odata', 'model'],
+      needs: 'an activated OData V2 service',
+    },
+  ],
+};
+
+test('samples catalogue.json adapts to the row shape, stage and docs included', () => {
+  const [hello, list] = catalogueEntries(CAT_SAMPLES, 'samples');
+  assert.equal(hello.cls, 'Z2UI5_CL_SMP_APP_493', 'the class name is upper-cased like the page renders it');
+  assert.equal(hello.section, 'Basics');
+  assert.equal(hello.label, 'Basics I — Hello World, the Smallest App');
+  assert.equal(hello.keywords, 'hello world minimal', 'array keywords become the one searchable string');
+  assert.equal(hello.area, 'samples');
+  assert.equal(hello.stage, 'start');
+  // a bare URL becomes the { topic, url } pair the row parser returns
+  assert.deepEqual(hello.docs, [{
+    topic: 'get_started/hello_world',
+    url: 'https://abap2ui5.github.io/docs/get_started/hello_world',
+  }]);
+  // a title that just repeats its category must not lead the label -
+  // the page drops such a header and the two paths have to agree
+  assert.equal(list.label, 'Filter and Sort the Binding from ABAP');
+  assert.equal(list.title, 'List');
+});
+
+test('samples-controls catalogue.json leads with the entity and keeps the verification status', () => {
+  const [bc, donut] = catalogueEntries(CAT_CONTROLS, 'samples-controls');
+  // the entity is what an agent asks for - and unlike the SAMPLES.md rows,
+  // the JSON carries it for every port
+  assert.equal(bc.title, 'sap.m.Breadcrumbs');
+  assert.equal(bc.label, 'sap.m.Breadcrumbs — Breadcrumbs sample');
+  assert.equal(bc.section, 'sap.m');
+  assert.equal(bc.status, 'checked');
+  assert.deepEqual(bc.deviations, ['NOTE']);
+  assert.equal(bc.area, 'samples-controls');
+  // src/03 has no entity: the title already names the control
+  assert.equal(donut.title, 'sap.suite.ui.microchart - InteractiveDonutChart');
+  assert.equal(donut.status, 'collection');
+  assert.equal(donut.deviations, undefined, 'an empty deviation list is omitted, not shipped');
+});
+
+test('samples-stack catalogue.json exposes technology and what the system must provide', () => {
+  const [e] = catalogueEntries(CAT_STACK, 'samples-stack');
+  assert.equal(e.cls, 'Z2UI5_CL_SMPS_APP_315');
+  assert.equal(e.section, 'OData');
+  assert.equal(e.technology, 'OData');
+  assert.equal(e.needs, 'an activated OData V2 service');
+  assert.equal(e.label, 'Two Models in One View');
+  assert.equal(e.area, 'samples-stack');
+});
+
+/* The fallback contract: anything that is not that repository's catalogue -
+ * a truncated file, a foreign JSON, a future shape - answers null so the
+ * caller reads SAMPLES.md instead. An empty ARRAY is not null: that is a
+ * catalogue asserting there are no samples. */
+test('a JSON that is not the catalogue answers null, never a throw', () => {
+  for (const bad of [null, 'text', 42, [], {}, { samples: 'not-a-list' }, { ports: {} }]) {
+    assert.equal(catalogueEntries(bad, 'samples'), null, JSON.stringify(bad));
+  }
+  assert.equal(catalogueEntries({ samples: [] }, 'samples')?.length, 0);
+  // a damaged entry inside an otherwise healthy list is skipped, not fatal
+  const some = catalogueEntries({ samples: [null, 'x', {}, CAT_SAMPLES.samples[0]] }, 'samples');
+  assert.equal(some.length, 1);
+});
+
+test('a verified port outranks an unverified one when the relevance ties', () => {
+  /* Same keyword hit on every port, statuses deliberately in the wrong order
+   * in the file - between two equally relevant ports, the one a human has
+   * watched run is the better class to copy from. */
+  const mixed = {
+    ports: ['generated', 'checked', 'reviewed'].map((status, i) => ({
+      class: `z2ui5_cl_smpc_app_00${i}`,
+      file: `src/01/01/z2ui5_cl_smpc_app_00${i}.clas.abap`,
+      category: 'src/01',
+      library: 'sap.m',
+      entity: `sap.m.Gadget${i}`,
+      title: `Gadget ${i}`,
+      summary: 'a gadget',
+      keywords: 'gadget sap.m',
+      status,
+      deviations: [],
+    })),
+  };
+  const hits = searchExamples({ query: 'gadget', repo: 'samples-controls', rawCatalogue: mixed });
+  assert.deepEqual(hits.map((e) => e.status), ['checked', 'reviewed', 'generated']);
+  /* Ranked, not filtered: the status only breaks ties. A query that names
+   * the unverified port still finds it - and finds it first. */
+  const named = searchExamples({ query: 'gadget0', repo: 'samples-controls', rawCatalogue: mixed });
+  assert.equal(named[0].title, 'sap.m.Gadget0');
+  assert.equal(named[0].status, 'generated');
+});
+
+/* Which FILE answers, pinned against a checkout on disk: catalogue.json where
+ * the checkout has one, SAMPLES.md where it does not (an older checkout is
+ * exactly that, and must keep working untouched), SAMPLES.md again when the
+ * JSON is mid-pull garbage - and for `samples` the page's src/00 rows merged
+ * IN beside the JSON, because its catalogue deliberately covers src/01 only
+ * and the experimental area must not vanish with the upgrade. */
+test('catalogue.json is preferred, SAMPLES.md is the fallback and the src/00 supplement', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-cat-'));
+  const nowhere = path.join(base, 'not-checked-out');
+  const home = path.join(base, 'samples');
+  fs.mkdirSync(home, { recursive: true });
+  // SAMPLES.md is the samples probe, so every checkout shape carries it
+  fs.writeFileSync(path.join(home, 'SAMPLES.md'), [
+    '## Basics',
+    '',
+    '| Sample | Class |',
+    '|---|---|',
+    '| **Basics I** — Hello World<br><sub>page keywords</sub> | [`Z2UI5_CL_SMP_APP_493`](src/01/z2ui5_cl_smp_app_493.clas.abap) |',
+    '| Playground<br><sub>experimental thing</sub> | [`Z2UI5_CL_SMP_APP_321`](src/00/97/z2ui5_cl_smp_app_321.clas.abap) |',
+  ].join('\n'));
+  const query = () => JSON.parse(execFileSync(process.execPath, ['-e',
+    "import('./lib/examples.mjs').then(m => process.stdout.write(JSON.stringify({"
+    + 'entries: m.parseExamples(), summary: m.exampleSummary() })))'],
+  {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SAMPLES_HOME: home,
+      // authoritative misses: a set env var pointing nowhere resolves to null
+      SAMPLES_CONTROLS_HOME: nowhere,
+      AI_DEMOKIT_HOME: nowhere,
+      SAMPLES_STACK_HOME: nowhere,
+    },
+  }));
+  try {
+    // no catalogue.json: the row parser answers alone, as it always has
+    let r = query();
+    assert.equal(r.summary.sources.samples, 'SAMPLES.md');
+    assert.deepEqual(r.entries.map((e) => e.cls), ['Z2UI5_CL_SMP_APP_493', 'Z2UI5_CL_SMP_APP_321']);
+    assert.equal(r.entries[0].stage, undefined);
+
+    // with catalogue.json: the JSON wins for the classes it carries (the
+    // stage proves which file answered), the page still carries src/00
+    fs.writeFileSync(path.join(home, 'catalogue.json'), JSON.stringify({
+      samples: [{
+        class: 'z2ui5_cl_smp_app_493',
+        file: 'src/01/z2ui5_cl_smp_app_493.clas.abap',
+        category: 'Basics',
+        stage: 'start',
+        title: 'Basics I',
+        description: 'Hello World, the Smallest App',
+        summary: 'The smallest app that runs.',
+        keywords: ['hello', 'world'],
+        docs: [],
+      }],
+    }));
+    r = query();
+    assert.equal(r.summary.sources.samples, 'catalogue.json');
+    assert.deepEqual(r.entries.map((e) => e.cls), ['Z2UI5_CL_SMP_APP_493', 'Z2UI5_CL_SMP_APP_321']);
+    assert.equal(r.entries[0].stage, 'start', 'the class both files carry is answered from the JSON');
+    assert.equal(r.entries[1].area, 'experimental-or-test', 'the page-only src/00 row survives the upgrade');
+
+    // a catalogue.json that does not parse (mid-pull) falls back to the page
+    fs.writeFileSync(path.join(home, 'catalogue.json'), '{ "samples": [ trunca');
+    r = query();
+    assert.deepEqual(r.entries.map((e) => e.cls), ['Z2UI5_CL_SMP_APP_493', 'Z2UI5_CL_SMP_APP_321']);
+    assert.equal(r.entries[0].stage, undefined, 'the damaged JSON answered nothing - the page did');
+
+    // and the absent catalogues are still named, not silently dropped
+    assert.equal(r.summary.notSearched.length, 2);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 // --------------------------------------------------------------- guide ----
 /* The app-building guide, sliced by chapter the way the pitfalls catalogues
  * are. The document itself lives in the abap2UI5 checkout; the slicing does
@@ -610,6 +854,223 @@ test('a guide query narrows to whole chapters that carry every term', () => {
   assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip' }).map((s) => s.heading), ['5. Events']);
   // AND, like every other search here
   assert.deepEqual(sliceGuide(GUIDE_MD, { query: 'roundtrip popup' }), []);
+});
+
+// ------------------------------------------------------------- docs_search ----
+/* The documentation search over injected fixture pages - the real tree lives
+ * in the docs checkout, the semantics must not need it. What is pinned: AND-ed
+ * terms, the title > heading > body ranking, the published URL pair built the
+ * way the docs repo's own generate-llms.mjs builds them (SITE + /<path> plus
+ * the extension), and a snippet that quotes the matching section. */
+
+const DOC_PAGES = [
+  {
+    path: 'cookbook/value_help',
+    text: '---\ntitle: meta\n---\n# Value Help\n\nBoth halves of the value help.\n\n## The F4 dialog\n\nThe dialog behind the field opens on F4.\n',
+  },
+  {
+    path: 'advanced/linter',
+    text: '# The linter\n\nChecks a view without a system.\n\n## Value help findings\n\nA suggestion-only field is flagged.\n',
+  },
+  {
+    path: 'get_started/setup',
+    text: '# Setup\n\nInstall abapGit first. The value help sample helps later.\n\n```abap\n" value help inside a fence is still body text\n```\n',
+  },
+];
+
+test('docs are ranked title over heading over body, terms AND-ed', () => {
+  const hits = searchDocs({ query: 'value help', pages: DOC_PAGES });
+  assert.deepEqual(hits.map((h) => h.path),
+    ['cookbook/value_help', 'advanced/linter', 'get_started/setup']);
+  // AND: adding a term that only one page carries narrows to it
+  assert.deepEqual(searchDocs({ query: 'value help suggestion', pages: DOC_PAGES }).map((h) => h.path),
+    ['advanced/linter']);
+  assert.deepEqual(searchDocs({ query: 'value help nonexistent', pages: DOC_PAGES }), []);
+  assert.deepEqual(searchDocs({ query: '', pages: DOC_PAGES }), []);
+});
+
+test('a docs hit carries the published URL pair and a quoting snippet', () => {
+  const [hit] = searchDocs({ query: 'f4 dialog', pages: DOC_PAGES });
+  assert.equal(hit.path, 'cookbook/value_help');
+  assert.equal(hit.title, 'Value Help', 'the title is the # heading, not the frontmatter');
+  assert.equal(hit.heading, 'The F4 dialog', 'the best-matching section is named');
+  assert.match(hit.snippet, /opens on F4/);
+  // the URL shapes the docs repo publishes: <path>.html rendered, <path>.md raw
+  assert.equal(hit.url, 'https://abap2ui5.github.io/docs/cookbook/value_help.html');
+  assert.equal(hit.markdown, 'https://abap2ui5.github.io/docs/cookbook/value_help.md');
+});
+
+test('the docs search honours its limit and never throws on damaged pages', () => {
+  assert.equal(searchDocs({ query: 'value', pages: DOC_PAGES, limit: 2 }).length, 2);
+  for (const bad of ['', '---\nunclosed', '# only a title', '```\nfence never closed', '## \n\n|']) {
+    assert.doesNotThrow(() => searchDocs({ query: 'x y', pages: [{ path: 'p', text: bad }] }),
+      `searchDocs threw on ${JSON.stringify(bad)}`);
+  }
+});
+
+test('a docs checkout is found through DOCS_HOME and its probe', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-docs-'));
+  try {
+    fs.mkdirSync(path.join(home, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'docs', 'index.md'), '# docs');
+    const found = execFileSync(process.execPath, ['-e',
+      "import('./lib/repos.mjs').then(m => process.stdout.write(String(m.resolveDocs())))"],
+    { cwd: ROOT, env: { ...process.env, DOCS_HOME: home }, encoding: 'utf8' });
+    assert.equal(found, home);
+    // a directory without the page tree is not a docs checkout
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'a2ui5-notdocs-'));
+    const miss = execFileSync(process.execPath, ['-e',
+      "import('./lib/repos.mjs').then(m => process.stdout.write(String(m.resolveDocs())))"],
+    { cwd: ROOT, env: { ...process.env, DOCS_HOME: empty }, encoding: 'utf8' });
+    assert.equal(miss, 'null', 'a set env var pointing at a non-checkout must resolve to null, not fall through');
+    fs.rmSync(empty, { recursive: true, force: true });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// ------------------------------------------------------------------ api ----
+/* The client API (z2ui5_if_client), parsed from a fixture that carries every
+ * shape the real interface uses: single-line and multi-line METHODS, ABAP-Doc
+ * with @parameter blocks, inline " notes on parameters and constant entries,
+ * nested cs_* groups, TYPES with their doc INSIDE the block. The real file is
+ * in the abap2UI5 checkout; the parsing must not need it. */
+
+const API_FIXTURE = `INTERFACE z2ui5_if_client
+  PUBLIC.
+
+  CONSTANTS:
+    BEGIN OF cs_device,
+      BEGIN OF system,
+        phone   TYPE string VALUE \`phone\`,
+        desktop TYPE string VALUE \`desktop\`,
+      END OF system,
+    END OF cs_device.
+
+  CONSTANTS:
+    BEGIN OF cs_event,
+      start_timer TYPE string VALUE \`START_TIMER\`,
+      "obsolet
+      z2ui5       TYPE string VALUE \`Z2UI5\`,
+    END OF cs_event.
+
+  CONSTANTS:
+    "! Hash-based routing modes - the doc sits INSIDE the block here.
+    BEGIN OF cs_nav_mode,
+      default TYPE string VALUE \`DEFAULT\`,
+    END OF cs_nav_mode.
+
+  TYPES:
+    "! Everything the frontend sent with this roundtrip.
+    BEGIN OF ty_s_get,
+      event TYPE string,
+    END OF ty_s_get.
+
+  METHODS view_destroy.
+
+  "! Display the MAIN view. A new main view is a new screen.
+  METHODS view_display
+    IMPORTING
+      val TYPE clike.
+
+  "! obsolete - does NOTHING. It stays so existing apps keep compiling.
+  METHODS view_model_update.
+
+  "! @parameter omit_initial | keep INITIAL fields out of the model
+  "!                           instead of sending them as \`\` / 0
+  METHODS _bind
+    IMPORTING
+      val                  TYPE data
+      "obsolete - inactive, not passed on internally
+      view                 TYPE clike     DEFAULT cs_view-main
+      omit_initial         TYPE abap_bool DEFAULT abap_false
+      tab_index            TYPE i         OPTIONAL
+    RETURNING
+      VALUE(result)        TYPE string.
+
+  METHODS nav_app_leave
+    IMPORTING
+      VALUE(app)    TYPE REF TO z2ui5_if_app OPTIONAL
+      event         TYPE clike               OPTIONAL
+        PREFERRED PARAMETER app
+    RETURNING
+      VALUE(result) TYPE string.
+
+ENDINTERFACE.
+`;
+
+test('the client API parses into methods, constants and types', () => {
+  const p = parseApi(API_FIXTURE);
+  assert.deepEqual(p.methods.map((m) => m.name),
+    ['view_destroy', 'view_display', 'view_model_update', '_bind', 'nav_app_leave']);
+  assert.deepEqual(p.constants.map((c) => c.name), ['cs_device', 'cs_event', 'cs_nav_mode']);
+  assert.deepEqual(p.types.map((t) => t.name), ['ty_s_get']);
+
+  const display = p.methods.find((m) => m.name === 'view_display');
+  assert.match(display.doc, /new main view is a new screen/);
+  assert.deepEqual(display.parameters, [{ name: 'val', kind: 'importing', type: 'clike' }]);
+
+  // nesting flattens to the path an app actually writes
+  assert.deepEqual(p.constants[0].values.map((v) => v.path),
+    ['cs_device-system-phone', 'cs_device-system-desktop']);
+  // a doc INSIDE the CONSTANTS/TYPES block still documents the group
+  assert.match(p.constants[2].doc, /INSIDE the block/);
+  assert.match(p.types[0].doc, /frontend sent/);
+  assert.match(p.types[0].definition, /event TYPE string/);
+});
+
+test('obsolete methods and tagged constants are marked, never hidden', () => {
+  const p = parseApi(API_FIXTURE);
+  // the obsolete half of the interface exists so old apps compile - an agent
+  // must SEE it (to read old code) and see it marked (to not write new calls)
+  assert.equal(p.methods.find((m) => m.name === 'view_model_update').obsolete, true);
+  assert.equal(p.methods.find((m) => m.name === 'view_display').obsolete, false);
+  const ev = p.constants.find((c) => c.name === 'cs_event');
+  assert.equal(ev.values.find((v) => v.path === 'cs_event-z2ui5').note, 'obsolet');
+  assert.equal(ev.values.find((v) => v.path === 'cs_event-start_timer').note, undefined);
+});
+
+test('a parameter carries its default, its optionality and its own doc', () => {
+  const bind = parseApi(API_FIXTURE).methods.find((m) => m.name === '_bind');
+  const by = Object.fromEntries(bind.parameters.map((x) => [x.name, x]));
+  assert.equal(by.view.default, 'cs_view-main');
+  // the inline " note above a parameter is that parameter's documentation
+  assert.match(by.view.doc, /obsolete - inactive/);
+  // an @parameter block reaches the parameter it names, wrapped lines joined
+  assert.match(by.omit_initial.doc, /keep INITIAL fields out of the model instead/);
+  assert.equal(by.tab_index.optional, true);
+  assert.equal(by.result.kind, 'returning');
+
+  const nav = parseApi(API_FIXTURE).methods.find((m) => m.name === 'nav_app_leave');
+  assert.equal(nav.parameters.find((x) => x.name === 'app').preferred, true);
+  assert.equal(nav.parameters.find((x) => x.name === 'app').type, 'REF TO z2ui5_if_app');
+});
+
+test('an API query is AND-ed and returns whole entries', () => {
+  const p = parseApi(API_FIXTURE);
+  const timer = searchApi(p, 'timer');
+  assert.deepEqual(timer.constants.map((c) => c.values.map((v) => v.path)).flat(), ['cs_event-start_timer']);
+  assert.deepEqual(timer.methods, []);
+  // a method hit comes back with ALL its parameters, not the matching one
+  const omit = searchApi(p, 'omit initial');
+  assert.deepEqual(omit.methods.map((m) => m.name), ['_bind']);
+  assert.equal(omit.methods[0].parameters.length, 5);
+  // AND: a second term that matches nothing removes the hit
+  assert.deepEqual(searchApi(p, 'timer omit').constants, []);
+  // a group whose NAME matches returns the whole group
+  assert.equal(searchApi(p, 'cs_device').constants[0].values.length, 2);
+});
+
+test('the API parser reports, never throws, on a damaged interface', () => {
+  for (let i = 0; i <= 40; i++) {
+    const cut = API_FIXTURE.slice(0, Math.floor((API_FIXTURE.length * i) / 40));
+    assert.doesNotThrow(() => parseApi(cut), `parseApi threw on a ${i}/40 truncation`);
+    assert.doesNotThrow(() => apiSummary(parseApi(cut)), `apiSummary threw on a ${i}/40 truncation`);
+    assert.doesNotThrow(() => searchApi(parseApi(cut), 'timer'), `searchApi threw on a ${i}/40 truncation`);
+  }
+  for (const bad of ['', 'METHODS', 'CONSTANTS:', 'TYPES:', '"! doc for nothing', 'BEGIN OF x,']) {
+    assert.doesNotThrow(() => parseApi(bad), `parseApi threw on ${JSON.stringify(bad)}`);
+  }
 });
 
 // ---------------------------------------------------------- screenshot ----

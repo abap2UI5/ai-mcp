@@ -64,27 +64,80 @@ that need a real SAP system.
 
 ## Tools
 
-| Tool | What it does |
-|---|---|
-| `capabilities` | Whether abap2UI5 can express a UI5 feature at all, from the verified capability map |
-| `app_guide` | How to build an app, live from the framework checkout |
-| `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included |
-| `examples` | Search the three sample catalogues — answers with a class to read, never a snippet to trust |
-| `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls |
-| `pitfalls` | The defects a green run does not catch: `{ area: "abap" }` and `{ area: "view" }` |
-| `scope_of` | In/out-of-scope verdict for a UI5 control |
-| `validate_view` | The linter's gates in seconds, judged by your project's own `abap2ui5lint.jsonc` |
-| `screenshot_view` | See the view in seconds — no build, no backend |
-| `deploy_app` | Write the class + abapGit sidecar into the gitignored sandbox, then abaplint it |
-| `build_backend` | Rebuild the transpiled Node backend; incremental after the first full build |
-| `run_app` | Boot an app headless: status, real page errors, and a **screenshot** |
-| `backend` | `status` / `start` / `stop` / `restart` of the local express backend |
-| `remove_app` | Delete a dev app from the sandbox, or list the deployed ones |
+Every tool reads live from a sibling checkout, and each one needs a specific
+sibling — there is no "optional" repository, only tools you do or do not use.
+The **Needs** column says which checkout a tool is dead without: the linter
+alone carries `validate_view` and `screenshot_view` (the fast loop, where most
+iterations happen), the framework checkout carries the guide, the pitfalls and
+the backend, and the corpus carries almost everything else. A tool whose
+checkout is missing answers with the clone command and env var that fix it.
 
-`screenshot_view` and `run_app` answer the same question at three orders of
-magnitude apart: the first photographs the reconstructed **view** with no
-backend, the second the **running app** after a build. Most iterations should
-end at the first.
+| Tool | What it does | Needs |
+|---|---|---|
+| `capabilities` | Whether abap2UI5 can express a UI5 feature at all, from the verified capability map | samples-controls |
+| `app_guide` | How to build an app, live from the framework checkout | abap2UI5 |
+| `api_reference` | The client API (`z2ui5_if_client`) with its ABAP-Doc: methods, parameters, defaults, the `cs_*` constants | abap2UI5 |
+| `scaffold_app` | The files a new project starts from, live from app-template; `{ class: … }` renames throughout, sidecar `CLSNAME` included | app-template |
+| `examples` | Search the three sample catalogues, verification status and all — answers with a class to read, never a snippet to trust | any of samples / samples-controls / samples-stack |
+| `docs_search` | Full-text search over the documentation site's pages: page, heading, snippet and the published URL | docs |
+| `generation_rules` | The rulebook for porting a UI5 demo-kit sample into samples-controls | samples-controls |
+| `pitfalls` | The defects a green run does not catch: `{ area: "abap" }` and `{ area: "view" }` | abap2UI5 |
+| `scope_of` | In/out-of-scope verdict for a UI5 control | samples-controls + an OpenUI5 checkout |
+| `validate_view` | The linter's gates in seconds, judged by your project's own `abap2ui5lint.jsonc` | linter |
+| `screenshot_view` | See the view in seconds — no build, no backend | linter |
+| `deploy_app` | Write the class + abapGit sidecar into the gitignored sandbox, then abaplint it | samples-controls |
+| `build_backend` | Rebuild the transpiled Node backend; incremental after the first full build | samples-controls + abap2UI5 |
+| `run_app` | Boot an app headless: status, real page errors, and a **screenshot** | samples-controls + abap2UI5 |
+| `backend` | `status` / `start` / `stop` / `restart` of the local express backend | abap2UI5 (start/restart; status and stop always work) |
+| `remove_app` | Delete a dev app from the sandbox, or list the deployed ones | samples-controls |
+
+`examples` degrades per catalogue instead of failing: it searches the
+checkouts it finds and names the ones it could not, so a thinner answer never
+reads as "nobody has built this". It reads each repository's committed
+`catalogue.json` where the checkout has one — which is what carries a control
+port's verification status (checked over reviewed over generated, used to
+break ranking ties), the learning-path stage, and what a stack sample needs
+from the system — and falls back to parsing `SAMPLES.md` on a checkout from
+before that file existed. `screenshot_view` and `run_app` answer the
+same question at three orders of magnitude apart: the first photographs the
+reconstructed **view** with no backend, the second the **running app** after a
+build. Most iterations should end at the first.
+
+## Resources
+
+The knowledge documents behind those tools are also MCP **resources**, for
+clients that surface them (context pickers, attach-a-document UIs) and for
+agents that want a document whole instead of sliced. Same live reads from the
+same sibling checkouts: listing is free (no checkout needed), reading a
+resource whose checkout is missing answers with the same actionable error the
+tool gives.
+
+| Resource | Content | Needs |
+|---|---|---|
+| `abap2ui5://guide` | The app-building guide, whole (`app_guide` slices it) | abap2UI5 |
+| `abap2ui5://guide/{chapter}` | One guide chapter, by number or heading keyword (a resource template) | abap2UI5 |
+| `abap2ui5://api` | The client API summary — every `z2ui5_if_client` method, constant group and type, one line each | abap2UI5 |
+| `abap2ui5://pitfalls/abap` | abap-check — the ABAP defects a green CI does not catch | abap2UI5 |
+| `abap2ui5://pitfalls/view` | ui5-check — the view defects a green CI does not catch | abap2UI5 |
+| `abap2ui5://capabilities` | CAPABILITIES.md — the verified capability map | samples-controls |
+| `abap2ui5://generation-rules` | The rulebook for porting a UI5 demo-kit sample | samples-controls |
+
+## Prompts
+
+Two prompts — one per job this server serves — put an agent straight into the
+loop instead of leaving it to reconstruct the order from sixteen tool
+descriptions. Each renders an orchestration script over the tools above and
+duplicates none of their content:
+
+- **`build-an-abap2ui5-app`** (argument: `task`, what the app should do) —
+  orient with `examples`/`capabilities`, learn the shape from `app_guide`,
+  write the class, iterate through `validate_view`/`screenshot_view` in
+  seconds, prove it with `deploy_app` → `build_backend` → `run_app`, close
+  with `pitfalls`.
+- **`port-a-ui5-sample`** (argument: `sample`, the demo-kit sample) — the
+  corpus job: `generation_rules` as the brief, `scope_of` and `capabilities`
+  before writing, neighbouring ports from `examples`, then the same
+  validate/screenshot/deploy/run loop.
 
 ## Notes
 

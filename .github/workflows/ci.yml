@@ -62,6 +62,9 @@ jobs:
       # scaffold tests skip themselves, and a smoke job that silently covers
       # less than it appears to is worse than one that fails.
       - run: git clone --depth 1 https://github.com/abap2UI5/app-template
+      # the documentation site's sources - docs_search reads them, and its
+      # smoke assertions only run when the checkout is there
+      - run: git clone --depth 1 https://github.com/abap2UI5/docs
       - run: npm ci
         working-directory: mcp-server
       - run: npm test

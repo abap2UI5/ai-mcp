@@ -8,13 +8,17 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveSamplesControls, resolveViewCheck, resolveA2UI5 } from '../lib/repos.mjs';
+import { resolveSamplesControls, resolveViewCheck, resolveA2UI5, resolveDocs } from '../lib/repos.mjs';
+import { TOOL_NAMES } from '../lib/tools.mjs';
+import { RESOURCE_URIS, GUIDE_CHAPTER_TEMPLATE } from '../lib/resources.mjs';
+import { PROMPT_NAMES } from '../lib/prompts.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const HAVE_CORPUS = !!resolveSamplesControls();
 const HAVE_LINTER = !!resolveViewCheck();
 const HAVE_A2UI5 = !!resolveA2UI5();
+const HAVE_DOCS = !!resolveDocs();
 /* The picture needs more than the linter checkout: the UI5 sources and the
  * browser that renders them, which is an opt-in install there
  * (@abap2ui5/render-runtime + `playwright install chromium`). Absent, this is
@@ -22,25 +26,12 @@ const HAVE_A2UI5 = !!resolveA2UI5();
 const HAVE_RENDER_RUNTIME = HAVE_LINTER
   && fs.existsSync(path.join(resolveViewCheck(), 'node_modules', '@openui5', 'sap.m'));
 
-// the complete tool surface — a new/renamed/dropped tool must show up here
-export const TOOL_NAMES = [
-  'app_guide',
-  'backend',
-  'build_backend',
-  'capabilities',
-  'deploy_app',
-  'examples',
-  'generation_rules',
-  'pitfalls',
-  'remove_app',
-  'run_app',
-  'scaffold_app',
-  'scope_of',
-  'screenshot_view',
-  'validate_view',
-];
+/* The complete tool surface, DERIVED from the TOOLS array rather than kept as
+ * a copy here (this list was one of the four hand-duplicates AGENTS.md flagged
+ * as a drift trap). What this smoke still pins is that the running server
+ * serves exactly that array over stdio. */
 
-test('stdio smoke: initialize, 14 tools, a capabilities query', { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
+test(`stdio smoke: initialize, ${TOOL_NAMES.length} tools, a capabilities query`, { skip: !HAVE_CORPUS && 'samples-controls sibling not found' }, async () => {
   const p = spawn('node', [path.join(ROOT, 'server.mjs')], { stdio: ['pipe', 'pipe', 'ignore'] });
   let buf = '';
   p.stdout.on('data', (d) => (buf += d));
@@ -180,7 +171,99 @@ test('stdio smoke: initialize, 14 tools, a capabilities query', { skip: !HAVE_CO
       assert.match(g.sections[0].heading, /^1\./);
       assert.ok(g.chapters.length > 3, `the whole table of contents comes back with it: ${g.chapters}`);
       assert.ok(g.sections[0].body.length > 100, 'a chapter arrives with its text, not just its name');
+
+      /* The client API, from the real interface: a queried method must arrive
+       * as a signature (parameters, defaults) and not as prose alone. */
+      send({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'api_reference', arguments: { query: 'follow_up_action' } } });
+      const apiRes = (await until((m) => m.id === 9, 15000)).result;
+      assert.ok(!apiRes.isError, `api_reference errored: ${apiRes.content[0].text}`);
+      const api = JSON.parse(apiRes.content[0].text);
+      const fua = (api.methods || []).find((m) => m.name === 'follow_up_action');
+      assert.ok(fua, `follow_up_action must be found: ${apiRes.content[0].text.slice(0, 200)}`);
+      assert.ok(fua.parameters.some((p) => p.name === 't_arg'), 'the signature comes with its parameters');
+      assert.ok(fua.doc.length > 200, 'the ABAP-Doc comes with the method');
+
+      // and the no-argument call is the compact surface, not the whole text
+      send({ jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'api_reference', arguments: {} } });
+      const apiAll = JSON.parse((await until((m) => m.id === 10, 15000)).result.content[0].text);
+      assert.ok(apiAll.methods.length > 20, 'every method is listed');
+      assert.ok(apiAll.constants.some((c) => c.name === 'cs_event'), 'the constant groups are listed');
+      assert.ok(apiAll.methods.some((m) => m.obsolete), 'obsolete methods are marked, not hidden');
     }
+
+    /* The documentation site, searched from its checkout: a hit must carry
+     * the published URL pair the docs repo actually serves. */
+    if (HAVE_DOCS) {
+      send({ jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'docs_search', arguments: { query: 'mcp server', limit: 3 } } });
+      const docsRes = (await until((m) => m.id === 11, 15000)).result;
+      assert.ok(!docsRes.isError, `docs_search errored: ${docsRes.content[0].text}`);
+      const docs = JSON.parse(docsRes.content[0].text);
+      assert.ok(docs.matches > 0, 'the site documents its own MCP server');
+      const [hit] = docs.entries;
+      assert.match(hit.url, /^https:\/\/abap2ui5\.github\.io\/docs\/.+\.html$/);
+      assert.match(hit.markdown, /^https:\/\/abap2ui5\.github\.io\/docs\/.+\.md$/);
+      assert.ok(hit.title && hit.heading, 'a hit names its page and section');
+    }
+
+    /* The knowledge documents as MCP resources: the list is the derived
+     * catalogue from lib/resources.mjs (names and URIs, no file reads), the
+     * per-chapter guide is a resource TEMPLATE, and a read hands the document
+     * over whole. */
+    send({ jsonrpc: '2.0', id: 12, method: 'resources/list' });
+    const resList = (await until((m) => m.id === 12)).result;
+    assert.deepEqual(resList.resources.map((r) => r.uri).sort(), RESOURCE_URIS);
+    for (const r of resList.resources) {
+      assert.ok(r.name && r.description && r.mimeType, `resource ${r.uri} must carry name, description, mimeType`);
+    }
+
+    send({ jsonrpc: '2.0', id: 13, method: 'resources/templates/list' });
+    const tmpl = (await until((m) => m.id === 13)).result;
+    assert.deepEqual(tmpl.resourceTemplates.map((t) => t.uriTemplate), [GUIDE_CHAPTER_TEMPLATE]);
+
+    // the capability map read whole — the corpus is present in this suite
+    send({ jsonrpc: '2.0', id: 14, method: 'resources/read', params: { uri: 'abap2ui5://capabilities' } });
+    const capRead = await until((m) => m.id === 14);
+    assert.ok(!capRead.error, `reading the capability map errored: ${JSON.stringify(capRead.error)}`);
+    const [capDoc] = capRead.result.contents;
+    assert.equal(capDoc.uri, 'abap2ui5://capabilities');
+    assert.equal(capDoc.mimeType, 'text/markdown');
+    assert.ok(capDoc.text.length > 1000, 'the whole document comes back, not a stub');
+
+    if (HAVE_A2UI5) {
+      // one chapter through the template, same slicing as the app_guide tool
+      send({ jsonrpc: '2.0', id: 15, method: 'resources/read', params: { uri: 'abap2ui5://guide/1' } });
+      const chap = await until((m) => m.id === 15);
+      assert.ok(!chap.error, `reading a guide chapter errored: ${JSON.stringify(chap.error)}`);
+      assert.match(chap.result.contents[0].text, /^## 1\./, 'the asked-for chapter, with its heading');
+    }
+
+    /* The workflow prompts: the derived list from lib/prompts.mjs, and a get
+     * that renders the loop AROUND the task - orchestration over the existing
+     * tools, never their content. */
+    send({ jsonrpc: '2.0', id: 16, method: 'prompts/list' });
+    const promptList = (await until((m) => m.id === 16)).result;
+    assert.deepEqual(promptList.prompts.map((pr) => pr.name).sort(), PROMPT_NAMES);
+    for (const pr of promptList.prompts) {
+      assert.ok(pr.description && pr.arguments?.length, `prompt ${pr.name} must declare description and arguments`);
+    }
+
+    send({
+      jsonrpc: '2.0', id: 17, method: 'prompts/get',
+      params: { name: 'build-an-abap2ui5-app', arguments: { task: 'a flight table with a search field' } },
+    });
+    const got = await until((m) => m.id === 17);
+    assert.ok(!got.error, `prompts/get errored: ${JSON.stringify(got.error)}`);
+    const rendered = got.result.messages[0].content.text;
+    assert.ok(rendered.includes('a flight table with a search field'), 'the task lands in the rendered prompt');
+    for (const tool of ['examples', 'app_guide', 'validate_view', 'screenshot_view', 'deploy_app', 'build_backend', 'run_app', 'pitfalls']) {
+      assert.ok(rendered.includes(`\`${tool}\``), `the prompt must walk the loop through ${tool}`);
+    }
+
+    // a missing required argument is the get request's error, with the way out
+    send({ jsonrpc: '2.0', id: 18, method: 'prompts/get', params: { name: 'build-an-abap2ui5-app', arguments: {} } });
+    const noArg = await until((m) => m.id === 18);
+    assert.ok(noArg.error, 'a required argument left out must be a JSON-RPC error');
+    assert.match(noArg.error.message, /needs the argument 'task'/);
   } finally {
     p.kill();
   }

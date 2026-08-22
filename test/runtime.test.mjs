@@ -82,7 +82,14 @@ function fakeRepos(buildScript) {
 async function withFakeRepos(buildScript, extraEnv, fn) {
   const { base, demokit, a2 } = fakeRepos(buildScript);
   const saved = {};
-  const wanted = { AI_DEMOKIT_HOME: demokit, A2UI5_HOME: a2, ...extraEnv };
+  /* AI_DEMOKIT_HOME is the OLDER env var (kept working on purpose - see
+   * lib/repo-dirs.json), and a SAMPLES_CONTROLS_HOME set in the surrounding
+   * shell outranks it by design: newest-first, first SET wins. Cleared for
+   * the duration so the fake corpus decides - without this, a developer whose
+   * environment points at a real samples-controls checkout runs the REAL
+   * e2e-build here. The precedence itself is correct and stays; what was
+   * wrong was this test leaving the competing var in place. */
+  const wanted = { AI_DEMOKIT_HOME: demokit, SAMPLES_CONTROLS_HOME: '', A2UI5_HOME: a2, ...extraEnv };
   for (const [k, v] of Object.entries(wanted)) {
     saved[k] = process.env[k];
     process.env[k] = v;

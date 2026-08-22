@@ -34,10 +34,11 @@ is no silent fallback to the sibling guess.
 
 | Env var | Default sibling | Used for |
 | --- | --- | --- |
-| `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
+| `SAMPLES_CONTROLS_HOME` (was `AI_DEMOKIT_HOME`, still read) | `../samples-controls`, `../abap2UI5-api`, `../ai-demokit` | CAPABILITIES.md (re-parsed on every query), `catalogue.json` + `SAMPLES.md` (the control catalogue `examples` searches), `scripts/generation-prompt.txt`, `scripts/scope-of.mjs`, `scripts/e2e-build.mjs`, `abaplint.jsonc`, `src/zz_dev/` (deploy target), `node_modules/@openui5/*` (UI5 runtime for screenshots) |
 | `A2UI5_HOME` | `../abap2UI5` | `node/srv/express.mjs` (backend server), `node/downport/` + `node/setup/abap_transpile.json` (incremental build), `node/output/`, `.claude/skills/{abap-check,ui5-check}/SKILL.md` (`pitfalls`), `docs/agents/building-apps.md` (`app_guide`) |
-| `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `SAMPLES.md` — one of the three catalogues `examples` searches |
-| `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `SAMPLES.md` — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
+| `SAMPLES_HOME` | `../samples`, `../abap2UI5-samples` | `catalogue.json` (preferred) + `SAMPLES.md` (fallback, and the src/00 area) — one of the three catalogues `examples` searches |
+| `SAMPLES_STACK_HOME` | `../samples-stack`, `../abap2UI5-samples-stack` | `catalogue.json` (preferred) + `SAMPLES.md` (fallback) — the stack-dependent catalogue (OData, RAP, APC, launchpad) |
+| `DOCS_HOME` | `../docs` | `docs/**/*.md` — the documentation site's sources, searched live by `docs_search` |
 | `AI_VIEW_CHECK_HOME` | `../linter` (legacy aliases: `../abap2UI5-linter`, `../ai-view-check`) | `validate_view` + `screenshot_view`: dynamic import of the linter's package `exports` entries `.`, `./findings`, `./config`, `./rule-docs` (via `importViewCheck`) |
 
 Also: `A2UI5_MCP_PORT`, `A2UI5_MCP_OFFLINE=1` (no CDN fallback for UI5),
@@ -47,14 +48,18 @@ and `A2UI5_MCP_BUILD_TIMEOUT_MS` (default 30 min).
 
 A missing checkout degrades **per tool** (the server still starts;
 `resolve*` returns null and the affected tool returns a uniform, actionable
-error — which repo, how to clone it, which env var; see `missingSibling` in
-`server.mjs`) — `validate_view`/`screenshot_view` need the linter,
-`run_app`/`backend` need the core repo (and so do `pitfalls` and `app_guide`,
-whose documents are maintained beside the framework sources), almost
-everything else needs samples-controls. The README calls the linter
-"optional"; that is true for 12 of the 14 tools and fatal for the two that ARE
-the fast loop. `test/missing-siblings.test.mjs` pins this contract per tool by
-pointing every env var at a nonexistent directory.
+error — which repo, how to clone it, which env var; the repo-and-hint table is
+`lib/siblings.mjs`, wrapped by `missingSibling` in `server.mjs` and thrown
+as the read error by `lib/resources.mjs`, so tools and resources degrade
+with the same words) — `validate_view`/`screenshot_view` need the linter,
+`run_app`/`backend` need the core repo (and so do `pitfalls`, `app_guide` and
+`api_reference`, whose documents and interface are maintained beside the
+framework sources), almost everything else needs samples-controls. The README used to call the linter
+"optional" — true for every tool but the two that ARE the fast loop, and
+therefore the wrong word; its tool table now carries a **Needs** column naming
+the sibling each tool is dead without, and that column must keep saying what
+this section says. `test/missing-siblings.test.mjs` pins this contract per
+tool by pointing every env var at a nonexistent directory.
 
 `examples` is the ONE exception and deliberately so: it reads three
 catalogues, and one of them missing is not a reason to refuse the other two.
@@ -67,30 +72,60 @@ It answers from what it can read, names what it could not under
 These upstream file names/shapes are load-bearing for mcp-server. When one
 changes upstream, this repo must change in the same breath:
 
-- samples, samples-controls, samples-stack: the `SAMPLES.md` **row shape** —
+- samples, samples-controls, samples-stack: **`catalogue.json`**, the
+  machine-readable catalogue all three commit at repo root — the file
+  `examples` PREFERS when a checkout has it. The three shapes differ per
+  repository and each is load-bearing: samples' `samples[]` (class, file,
+  category, learning-path `stage`, keywords as an array, docs as bare URLs),
+  samples-controls' `ports[]` (entity, library, upstream sample id,
+  verification `status` checked/reviewed/generated/collection, `deviations`,
+  keywords as one string), samples-stack's `samples[]` (package, `technology`,
+  `needs`, keywords as an array). One adapter per repository
+  (`lib/examples.mjs` `catalogueEntries`) folds them into the single entry
+  shape the row parser produces; a shape change upstream is a change here. A
+  JSON that does not parse falls back to the page below, never to an error.
+- the same three repos: the `SAMPLES.md` **row shape** —
   `| **title** — sub<br>summary<br><sub>keywords</sub> | [`CLASS`](path) |`.
   All three generate it identically and one parser reads all three
   (`lib/examples.mjs`), so a change to it in any of them is a change here. The
   parser matches the `<br>` blocks as a GROUP and classifies them afterwards
   rather than expecting a fixed sequence — twice now a new block would
   otherwise have made every row unmatchable, and that failure reads as "there
-  are no samples for that" rather than as an error.
+  are no samples for that" rather than as an error. This parser is NOT
+  superseded by catalogue.json: it is the whole answer on a checkout from
+  before that file existed (which must keep working untouched — that IS the
+  compatibility surface), and on a current `samples` checkout it still
+  carries the src/00 experimental/test area, which samples' catalogue.json
+  deliberately leaves to the page — `examples` merges those rows in so the
+  `area: experimental-or-test` filter keeps answering.
 - samples-controls: `CAPABILITIES.md` **table format** (4 columns, status emoji —
   parser + legend in `lib/capabilities.mjs`), `scripts/generation-prompt.txt`,
   `scripts/scope-of.mjs` CLI output, `scripts/e2e-build.mjs`, `abaplint.jsonc`,
   the `src/zz_dev/` package convention.
 - samples-controls' SAMPLES.md carries its row header entirely in bold with no
   dash after it (`| **sap.m.Bar**<br>…`), which is the shape the row pattern
-  had to learn; and 241 of its 430 rows carry only the LIBRARY there
-  (`| **sap.m**<br>…`) rather than the control. That is an upstream generator
-  gap, not a parser one — those ports come back titled by their library, and
-  the fix belongs in samples-controls' `generate-samples-md`.
+  had to learn. 241 of its 430 rows used to carry only the LIBRARY there
+  (`| **sap.m**<br>…`) rather than the control — an upstream generator gap,
+  fixed in samples-controls' `generate-samples-md` (rows now lead with the
+  control entity, `| **sap.ui.table.Table** — Basic<br>…`); the row pattern
+  reads both the old and the fixed shape, so pre-fix checkouts keep working.
 - abap2UI5 core: `node/srv/express.mjs`, `node/setup/abap_transpile.json`,
   `node/downport/`, `node/output/init.mjs`, the two `.claude/skills/*-check/`
   catalogues, and **`docs/agents/building-apps.md`** — the app-building guide
   `app_guide` serves. Its `## ` headings are the chapters that tool slices on;
   a rename of the file is a broken tool here (reported, not silent — the tool
-  names the path it looked in).
+  names the path it looked in). **`src/02/z2ui5_if_client.intf.abap`** is
+  load-bearing the same way: `api_reference` parses it live (`lib/api.mjs` —
+  methods, `cs_*` constants, types, the ABAP-Doc and inline notes), relying on
+  the abaplint-pinned formatting; a move of the file is reported by path, and
+  a formatting change upstream is a parser change here.
+- docs: the `docs/` markdown tree (everything but `.vitepress`, `public` and
+  `node_modules` is a page) and the **published URL scheme** its
+  `scripts/generate-llms.mjs` derives — `https://abap2ui5.github.io/docs/<path>`
+  plus `.html` for the rendered page and `.md` for the raw twin published
+  beside it. `docs_search` (`lib/docs.mjs`) walks the same tree with the same
+  exclusions and hands back that URL pair; a change to either upstream is a
+  change here.
 - app-template: **`template.json`** — the template's own description of what a
   project takes from it (the placeholder class, `files.shared` / `files.named`,
   and the substitutions that make them somebody's). `lib/scaffold.mjs` EXECUTES
@@ -146,8 +181,9 @@ importing it in a test hangs the run rather than failing it — which is why
 it. `test/missing-siblings.test.mjs` boots the real server with the sibling env
 vars pointed at nonexistent directories and asserts every sibling-dependent
 tool degrades with its actionable error (this one runs everywhere);
-`test/smoke.test.mjs` boots the real server over stdio (initialize, 14 tools,
-a capabilities query) and **skips itself when the samples-controls sibling is
+`test/smoke.test.mjs` boots the real server over stdio (initialize, 16 tools,
+a capabilities query, the resource list and a resource read, the prompt list
+and a rendered prompt) and **skips itself when the samples-controls sibling is
 absent**, so `npm test` is green in a bare checkout and exercises the full
 path in a sibling workspace. CI (`.github/workflows/ci.yml`) runs `npm test`
 on every push/PR. Manual stdio driving, when a test is not enough:
@@ -164,7 +200,7 @@ setTimeout(() => { send({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"ca
 '
 ```
 
-Expect: an `initialize` result, 14 tools in `tools/list`, and capability rows
+Expect: an `initialize` result, 16 tools in `tools/list`, and capability rows
 for "popup". Pure units that are testable without any sibling checkout (add
 tests here first): `stripJsonc` (`lib/runtime.mjs`), the CAPABILITIES.md
 table parser (`lib/capabilities.mjs`), the class-name/`z2ui5_if_app`
@@ -183,13 +219,37 @@ legitimately slower.
 
 ## Maintenance traps (learned, do not repeat)
 
-- The **tool list in the `server.mjs` header comment** is duplicated by hand
-  — update it when adding a tool (it has drifted before: a missing
-  `remove_app` row). The server `version` is read from `package.json` at
-  startup and asserted by the tests; the exact tool-name set is pinned in
-  `test/smoke.test.mjs` (`TOOL_NAMES`) and `test/missing-siblings.test.mjs`
-  — adding/renaming a tool must update those lists, and the COUNT is written
-  out in this file, in the README table and in the smoke test's name.
+- The **tool surface has one source: the `TOOLS` array in `lib/tools.mjs`.**
+  It used to be duplicated by hand in four places (the `server.mjs` header
+  comment, the README table, this file, the test name lists) and each copy
+  drifted in its own way — a missing `remove_app` row in the header, counts
+  that lagged a tool behind. Now the stdio suites import the derived
+  `TOOL_NAMES`, and `test/tool-surface.test.mjs` fails `npm test` when the
+  README table or any written-out "N tools" count in the prose stops matching
+  the array. Adding a tool therefore means: the array, its `handle` case, a
+  README table row — and the gate tells you about every count left behind.
+  The server `version` is read from `package.json` at startup and asserted by
+  the tests.
+- **The resource surface has the same one source: `lib/resources.mjs`.** The
+  `RESOURCES` array (plus `RESOURCE_TEMPLATES` for the per-chapter guide) is
+  what `resources/list` serves, and the same gate file checks the README's
+  Resources table and every written-out "N resources" count against it. Two
+  rules are load-bearing: **listing reads no file** (a client may poll it, and
+  a missing sibling must not make the list shrink or fail — which is why the
+  guide chapters are a template, not enumerated entries), and **a read
+  degrades exactly like a tool call** (the `lib/siblings.mjs` message, thrown,
+  reaching the client as the read request's JSON-RPC error —
+  `test/missing-siblings.test.mjs` pins both). The resources hand over the
+  same documents the tools slice; nothing may be bundled or paraphrased here.
+- **The prompt surface: `lib/prompts.mjs`, two prompts, deliberately no
+  more** — `build-an-abap2ui5-app` and `port-a-ui5-sample`, one per job this
+  server serves (the same split app_guide vs generation_rules draws). A
+  prompt is an ORCHESTRATION script over the existing tools, never a copy of
+  what a tool serves — the gate renders both and fails when a prompt names a
+  tool the `TOOLS` array does not define, so a tool rename cannot leave a
+  stale prompt behind. Prompts read no sibling checkout (the tools they
+  point at carry the degradation), which `test/missing-siblings.test.mjs`
+  pins by rendering one with every env var pointed at nowhere.
 - **A tool description is the only documentation the agent reads.** It never
   sees this file, the README or a comment — it picks a tool from the sentence
   in `TOOLS`. So two tools that answer neighbouring questions have to say
@@ -224,6 +284,7 @@ legitimately slower.
 | [samples-controls](https://github.com/abap2UI5/samples-controls) | Content substrate: capabilities, rules, scope, deploy target, UI5 runtime — and one of the three `examples` catalogues |
 | [samples](https://github.com/abap2UI5/samples) | The pattern catalogue `examples` searches |
 | [samples-stack](https://github.com/abap2UI5/samples-stack) | The stack-dependent catalogue `examples` searches |
-| [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server |
+| [abap2UI5](https://github.com/abap2UI5/abap2UI5) | Runtime substrate: transpiled backend + express server — and the client API `api_reference` parses |
+| [docs](https://github.com/abap2UI5/docs) | The documentation site `docs_search` reads, in source form |
 | [abap2UI5-linter](https://github.com/abap2UI5/linter) | `validate_view` implementation (imported via its package `exports` map) |
 | [vscode-extension](https://github.com/abap2UI5/vscode-extension) | Registers this server for MCP clients in the editor (`src/mcp.ts`) |
